@@ -115,4 +115,3 @@ source = ["cubexpress"]
 
 [tool.ruff.per-file-ignores]
 "tests/*" = ["S101"]
-

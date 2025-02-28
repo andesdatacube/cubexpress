@@ -1,0 +1,3 @@
+# **🏁 Conclusion**
+
+For deep learning workflows that require efficient data handling and pre-processing, `ee.data.getPixels` and `ee.data.computePixels` offer significant improvements over more traditional methods like `Export` and `getDownloadUrl`. These newer methods reduce local processing needs and bandwidth usage by leveraging server-side capabilities, making them ideal for preparing large-scale datasets needed for training deep learning models. Choosing the right method depends on the specific use case, data size, and required preprocessing steps.

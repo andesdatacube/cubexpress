@@ -2,13 +2,13 @@ docs_dir: .
 
 # Project information
 site_name: CubeXpress
-site_url: https://juliocontrerash.github.io/cubexpress/
+site_url: https://andesdatacube.github.io/cubexpress/
 site_author: IPL-UV
 site_description: A Python package for efficient processing of cubic earth observation (EO) data.
 
 
 # Repository
-repo_url: https://github.com/juliocontrerash/cubexpress/
+repo_url: https://github.com/andesdatacube/cubexpress/
 repo_name: cubexpress
 use_directory_urls: false
 

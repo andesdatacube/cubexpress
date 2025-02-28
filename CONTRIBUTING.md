@@ -4,11 +4,11 @@ We welcome contributions from the community! Every contribution, no matter how s
 
 ## **How to contribute** 🛠️
 
-1. **Fork the repository:** Start by forking the [CubeXpress](https://github.com/juliocontrerash/cubexpress) repository to your GitHub account. 🍴
+1. **Fork the repository:** Start by forking the [CubeXpress](https://github.com/andesdatacube/cubexpress) repository to your GitHub account. 🍴
 2. **Clone your fork locally:**
     ```bash
     cd <directory_in_which_repo_should_be_created>
-    git clone https://github.com/juliocontrerash/cubexpress.git
+    git clone https://github.com/andesdatacube/cubexpress.git
     cd cubexpress
     ```
 3. **Create a branch:** Create a new branch for your feature or bug fix:
@@ -51,9 +51,9 @@ We welcome contributions from the community! Every contribution, no matter how s
 ## **Types of contributions** 📦
 
 - **Report bugs:** 🐛
-  - Report bugs by creating an issue on the [CubeXpress GitHub repository](https://github.com/juliocontrerash/cubexpress/issues). Please include your operating system, setup details, and steps to reproduce the bug.
+  - Report bugs by creating an issue on the [CubeXpress GitHub repository](https://github.com/andesdatacube/cubexpress/issues). Please include your operating system, setup details, and steps to reproduce the bug.
 - **Fix bugs:** 🛠️ Look for issues tagged with "bug" and "help wanted" in the repository to start fixing.
 - **Implement features:** ✨ Contribute by implementing features tagged with "enhancement" and "help wanted."
 - **Write documentation:** 📚 Contribute to the documentation in the official docs, docstrings, or through blog posts and articles.
 - **Submit feedback:** 💬 Propose new features or give feedback by filing an issue on GitHub. 
-  - Use the [CubeXpress GitHub issues page](https://github.com/juliocontrerash/cubexpress/issues) for feedback.
+  - Use the [CubeXpress GitHub issues page](https://github.com/andesdatacube/cubexpress/issues) for feedback.

@@ -25,7 +25,7 @@
 
 ---
 
-**GitHub**: [https://github.com/juliocontrerash/cubexpress/](https://github.com/juliocontrerash/cubexpress/) 🌐
+**GitHub**: [https://github.com/andesdatacube/cubexpress/](https://github.com/andesdatacube/cubexpress/) 🌐
 
 **PyPI**: [https://pypi.org/project/cubexpress/](https://pypi.org/project/cubexpress/) 🛠️
 

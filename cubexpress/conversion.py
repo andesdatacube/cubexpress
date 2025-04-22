@@ -19,7 +19,7 @@ def geo2utm(lon: float, lat: float) -> tuple[float, float, str]:
     """
     x, y, zone, _ = utm.from_latlon(lat, lon)
     epsg_code = f"326{zone:02d}" if lat >= 0 else f"327{zone:02d}"
-    return x, y, f"EPSG:{epsg_code}"
+    return float(x), float(y), f"EPSG:{epsg_code}"
 
 
 def lonlat2rt(lon: float, lat: float, edge_size: int, scale: int) -> RasterTransform:

@@ -1,10 +1,10 @@
 docs/source
 output/
-demo.py
 demo/
 demo2.py
 borrador/
 images_s2/
+raw/
 # From https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
 
 # Byte-compiled / optimized / DLL files

@@ -1,7 +1,7 @@
 from cubexpress.conversion import lonlat2rt, geo2utm
 from cubexpress.download import getcube, getGeoTIFF
 from cubexpress.geotyping import RasterTransform, Request, RequestSet
-from cubexpress.utils import get_cube
+from cubexpress.utils import get_cube, cloud_table, table_to_requestset
 
 # Export the functions
 __all__ = [
@@ -12,7 +12,9 @@ __all__ = [
     "getcube",
     "getGeoTIFF",
     "geo2utm",
-    "get_cube"
+    "get_cube",
+    "cloud_table",
+    "table_to_requestset"
 ]
 
 # Dynamic version import

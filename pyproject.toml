@@ -1,106 +1,94 @@
 [tool.poetry]
-name = "cubexpress"
-version = "0.1.0"
-description = "A Python package for efficient processing of cubic earth observation (EO) data"
-authors = ["Julio Contreras <contrerasnetk@gmail.com>", "Cesar Aybar <csaybar@gmail.com>"]
-license = "MIT"
-repository = "https://github.com/andesdatacube/cubexpress/"
-documentation = "https://andesdatacube.github.io/cubexpress/"
-readme = "README.md"
-packages = [
-  {include = "cubexpress"}
+name        = "cubexpress"
+version     = "0.1.3"
+description = "Efficient processing of cubic Earth-observation (EO) data."
+authors     = [
+  "Julio Contreras <contrerasnetk@gmail.com>",
+  "Cesar Aybar     <csaybar@gmail.com>",
 ]
-
+license      = "MIT"
+repository   = "https://github.com/andesdatacube/cubexpress"
+documentation = "https://andesdatacube.github.io/cubexpress"
+readme       = "README.md"
+keywords     = ["earth-engine", "sentinel-2", "geospatial", "eo", "cube"]
+classifiers  = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: GIS",
+]
+packages = [{ include = "cubexpress" }]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
-numpy = ">=1.25.2"
-pandas = ">=2.0.3"
-utm = "^0.8.0"
+python            = ">=3.9,<4.0"
+numpy             = ">=1.25.2"
+pandas            = ">=2.0.3"
+utm               = ">=0.7.0,<0.9.0"
+pygeohash         = "^1.2.0"       
+rasterio          = ">=1.3.9"      
+earthengine-api   = ">=0.1.392"    
+pyarrow           = ">=14.0.0"      
+pyproj            = ">=3.6.0"
 
+
+# optional extras bundle everything heavy into ‘full’
+[tool.poetry.extras]
+full = ["rasterio", "earthengine-api", "pyarrow", "fastparquet"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.2.0"
-pytest-cov = "^4.0.0"
-deptry = "^0.16.2"
-mypy = "^1.5.1"
-pre-commit = "^3.4.0"
-tox = "^4.11.1"
+pytest      = "^7.2.0"
+pytest-cov  = "^4.0.0"
+deptry      = "^0.16.2"
+mypy        = "^1.5.1"
+pre-commit  = "^3.4.0"
+tox         = "^4.11.1"
+black       = "^24.2.0"   # NEW – referenced by tool.black
+isort       = "^5.13.0"   # NEW – referenced by tool.isort
+ruff        = "^0.3.4"    # match your config file
 
 [tool.poetry.group.docs.dependencies]
-mkdocs = "^1.4.2"
+mkdocs          = "^1.4.2"
 mkdocs-material = "^9.2.7"
-mkdocstrings = {extras = ["python"], version = "^0.26.1"}
+mkdocstrings    = { extras = ["python"], version = "^0.26.1" }
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+# ─────────────────────────────────── tooling configs (unchanged) ────────────
 [tool.mypy]
-files = ["cubexpress"]
-disallow_untyped_defs = true
+files                  = ["cubexpress"]
+disallow_untyped_defs  = true
 disallow_any_unimported = true
-no_implicit_optional = true
-check_untyped_defs = true
-warn_return_any = true
-warn_unused_ignores = true
-show_error_codes = true
-
+no_implicit_optional   = true
+check_untyped_defs     = true
+warn_return_any        = true
+warn_unused_ignores    = true
+show_error_codes       = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.isort]
-profile = "black"
-line_length = 120
-
+profile      = "black"
+line_length  = 120
 
 [tool.black]
-line-length = 120
-target-version = ["py39"]
+line-length     = 120
+target-version  = ["py39"]
 
 [tool.ruff]
 target-version = "py39"
-line-length = 120
-fix = true
-select = [
-    # flake8-2020
-    "YTT",
-    # flake8-bandit
-    "S",
-    # flake8-bugbear
-    "B",
-    # flake8-builtins
-    "A",
-    # flake8-comprehensions
-    "C4",
-    # flake8-debugger
-    "T10",
-    # flake8-simplify
-    "SIM",
-    # isort
-    "I",
-    # mccabe
-    "C90",
-    # pycodestyle
-    "E", "W",
-    # pyflakes
-    "F",
-    # pygrep-hooks
-    "PGH",
-    # pyupgrade
-    "UP",
-    # ruff
-    "RUF",
-    # tryceratops
-    "TRY",
+line-length    = 120
+fix            = true
+select         = [
+  "YTT", "S", "B", "A", "C4", "T10", "SIM",
+  "I", "C90", "E", "W", "F", "PGH", "UP", "RUF", "TRY",
 ]
-ignore = [
-    # LineTooLong
-    "E501",
-    # DoNotAssignLambda
-    "E731",
-]
+ignore         = ["E501", "E731"]
 
 [tool.ruff.format]
 preview = true
@@ -111,7 +99,6 @@ skip_empty = true
 [tool.coverage.run]
 branch = true
 source = ["cubexpress"]
-
 
 [tool.ruff.per-file-ignores]
 "tests/*" = ["S101"]

@@ -1,7 +1,10 @@
 from cubexpress.conversion import lonlat2rt, geo2utm
-from cubexpress.download import getcube, getGeoTIFF
 from cubexpress.geotyping import RasterTransform, Request, RequestSet
-from cubexpress.utils import get_cube, cloud_table, table_to_requestset
+from cubexpress.cloud_utils import cloud_table
+from cubexpress.cube import get_cube
+from cubexpress.request import table_to_requestset
+
+
 
 # pyproj
 # Export the functions
@@ -10,8 +13,6 @@ __all__ = [
     "RasterTransform",
     "Request",
     "RequestSet",
-    "getcube",
-    "getGeoTIFF",
     "geo2utm",
     "get_cube",
     "cloud_table",

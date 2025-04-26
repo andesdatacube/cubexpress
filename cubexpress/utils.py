@@ -372,7 +372,7 @@ def table_to_requestset(
         # ------- opción 1: mosaico por fecha --------------------------------
         if mosaic and len(img_ids) > 1:
             ee_img = ee.ImageCollection(
-                [ee.Image(f"{df.attrs["collection"]}/{img_id}") for img_id in img_ids]
+                [ee.Image(f"{df.attrs['collection']}/{img_id}") for img_id in img_ids]
             ).mosaic()                                   # ← ee.Image
             req_id = f"{row['day']}_mosaic"
             requests.append(
@@ -392,7 +392,7 @@ def table_to_requestset(
                     Request(
                         id=req_id,
                         raster_transform=raster_transform,
-                        image=f"{df.attrs["collection"]}/{img_id}",   # assetId str
+                        image=f"{df.attrs['collection']}/{img_id}",   # assetId str
                         bands=df.attrs["bands"],
                     )
                 )

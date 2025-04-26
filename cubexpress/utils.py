@@ -100,7 +100,7 @@ def download_manifest(ulist, full_outname):
                 "num_threads": 20,
                 "nodata": 65535,
                 "dtype": "uint16",
-                "count": 12,
+                "count": 13, # len(bands)
                 "lztd_level": 13,
                 "copy_src_overviews": True,
                 "overviews": "AUTO"
@@ -450,13 +450,9 @@ def _cloud_table_single_range(
     lon: float, lat: float,
     edge_size: int, scale: int,
     start: str, end: str,
-    bands: Sequence[str] | None = None,
     collection: str = "COPERNICUS/S2_HARMONIZED",
     nworks: int = 5,
 ) -> pd.DataFrame:
-
-    bands = (list(bands) if bands is not None else
-             ["B1","B2","B3","B4","B5","B6","B7","B8","B8A","B9","B11","B12"])
 
     roi = _square_roi(lon, lat, edge_size, scale)
     s2  = ee.ImageCollection(collection)
@@ -509,7 +505,8 @@ def cloud_table(
     edge_size: int = 2048, scale: int = 10,
     start: str = "2017-01-01", end: str = "2024-12-31",
     cloud_max: float = 7.0,
-    bands: Sequence[str] | None = None,
+    bands:list[str] | None = ["B1", "B2", "B3", "B4", "B5", "B6", "B7",
+              "B8", "B8A", "B9", "B11", "B12"],
     collection: str = "COPERNICUS/S2_HARMONIZED",
     output_path: str | pathlib.Path | None = None,
     nworks: int = 5,
@@ -551,8 +548,7 @@ def cloud_table(
                 need_fetch1 = (dt.date.fromisoformat(start), cached_start)
                 a1, b1 = need_fetch1
                 df_new1 = _cloud_table_single_range(lon, lat, edge_size, scale,
-                                a1.isoformat(), b1.isoformat(),
-                                bands=bands, collection=collection,
+                                a1.isoformat(), b1.isoformat(), collection=collection,
                                 nworks=nworks)
             else:
                 df_new1 = pd.DataFrame()
@@ -561,8 +557,7 @@ def cloud_table(
                 need_fetch2 = (cached_end, dt.date.fromisoformat(end))
                 a2, b2 = need_fetch2
                 df_new2 = _cloud_table_single_range(lon, lat, edge_size, scale,
-                                a2.isoformat(), b2.isoformat(),
-                                bands=bands, collection=collection,
+                                a2.isoformat(), b2.isoformat(), collection=collection,
                                 nworks=nworks)
             else:
                 df_new2 = pd.DataFrame()
@@ -580,8 +575,7 @@ def cloud_table(
             print("⏳", msg)
         a, b = need_fetch
         df_new = _cloud_table_single_range(lon, lat, edge_size, scale,
-                                        a.isoformat(), b.isoformat(),
-                                        bands=bands, collection=collection,
+                                        a.isoformat(), b.isoformat(), collection=collection,
                                         nworks=nworks)
         df_full = df_new
 
@@ -606,8 +600,7 @@ def cloud_table(
     result.attrs.update({
         "lon": lon, "lat": lat,
         "edge_size": edge_size, "scale": scale,
-        "bands": list(bands) if bands else ["B1","B2","B3","B4","B5","B6","B7",
-                                            "B8","B8A","B9","B11","B12"],
+        "bands": bands,
         "collection": collection,
         "cloud_max": cloud_max,
         "output_path": str(output_path) if output_path else "",

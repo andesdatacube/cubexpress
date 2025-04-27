@@ -27,7 +27,7 @@ df = cubexpress.cloud_table( # Generanting table .... Además guardarla para lue
 requests = cubexpress.table_to_requestset(df, mosaic=True)
 
 cubexpress.get_cube(requests, output, nworks)
-
+t 
 
 
 

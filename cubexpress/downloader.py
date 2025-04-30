@@ -20,7 +20,11 @@ from typing import Any, Dict, List
 import ee
 import rasterio as rio
 from rasterio.io import MemoryFile
+import logging
+import os
 
+os.environ['CPL_LOG_ERRORS'] = 'OFF'
+logging.getLogger('rasterio._env').setLevel(logging.ERROR)
 
 def download_manifest(ulist: Dict[str, Any], full_outname: pathlib.Path) -> None:
     """Download *ulist* and save it as *full_outname*.
@@ -43,27 +47,23 @@ def download_manifest(ulist: Dict[str, Any], full_outname: pathlib.Path) -> None
         with memfile.open() as src:
             profile = src.profile
             profile.update(
-                {
-                    "driver": "Gtiff",
-                    "tiled": "yes",
-                    "interleave": "band",
-                    "blockxsize": 256,
-                    "blockysize": 256,
-                    "compress": "ZSTD",
-                    "predictor": 2,
-                    "num_threads": 20,
-                    "nodata": 65535,
-                    "dtype": "uint16",
-                    "count": 13,
-                    "lztd_level": 13,
-                    "copy_src_overviews": True,
-                    "overviews": "AUTO",
-                }
+                driver="GTiff", 
+                tiled=True,
+                interleave="band",
+                blockxsize=256,
+                blockysize=256,
+                compress="ZSTD",
+                zstd_level=13,
+                predictor=2,
+                num_threads=20,
+                nodata=65535,
+                dtype="uint16",
+                count=13,
+                photometric="MINISBLACK"
             )
-            all_bands = src.read()
 
-    with rio.open(full_outname, "w", **profile) as dst:
-        dst.write(all_bands)
+            with rio.open(full_outname, "w", **profile) as dst:
+                dst.write(src.read())
 
     print(f"{full_outname} downloaded successfully.")  # noqa: T201
 

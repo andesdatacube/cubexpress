@@ -13,10 +13,6 @@ Both return a ``pandas.DataFrame`` with the columns **day**, **cloudPct** and
 from __future__ import annotations
 
 import datetime as dt
-import json
-import pathlib
-from typing import List, Optional
-
 import ee
 import pandas as pd
 
@@ -28,10 +24,8 @@ def _cloud_table_single_range(
     lon: float,
     lat: float,
     edge_size: int,
-    scale: int,
     start: str,
-    end: str,
-    collection: str = "COPERNICUS/S2_HARMONIZED",
+    end: str
 ) -> pd.DataFrame:
     """Return raw cloud-table rows for a single *start–end* interval.
 
@@ -53,76 +47,64 @@ def _cloud_table_single_range(
         Columns: **day** (str), **cloudPct** (float), **images** (str
         concatenation of asset IDs separated by ``-``). No filtering applied.
     """
-    roi = _square_roi(lon, lat, edge_size, scale)
-    s2 = ee.ImageCollection(collection)
 
-    if collection in (
-        "COPERNICUS/S2_HARMONIZED",
-        "COPERNICUS/S2_SR_HARMONIZED",
-    ):
-        qa_band = "cs_cdf"
-        csp = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED")
-    else:
-        qa_band, csp = None, None
+    center = ee.Geometry.Point([lon, lat])
+    roi = _square_roi(lon, lat, edge_size, 10)
 
-    def _add_props(img):
-        day = ee.Date(img.get("system:time_start")).format("YYYY-MM-dd")
-        imgid = img.get("system:index")
-
-        if qa_band:
-            score = (
-                img.linkCollection(csp, [qa_band])
-                .select([qa_band])
-                .reduceRegion(ee.Reducer.mean(), roi, scale)
-                .get(qa_band)
-            )
-            # If score is null assume completely clear (score=1 → cloudPct=0)
-            score_safe = ee.Algorithms.If(score, score, -1)
-            cloud_pct = (
-                ee.Number(1)
-                .subtract(ee.Number(score_safe))
-                .multiply(10000)
-                .round()
-                .divide(100)
-            )
-        else:
-            cloud_pct = ee.Number(-1)
-
-        return ee.Feature(
-            None,
-            {
-                "day": day,
-                "cloudPct": cloud_pct,
-                "images": imgid,
-            },
-        )
-
-    triples = (
-        s2.filterDate(start, end)
+    s2 = (
+        ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
         .filterBounds(roi)
-        .map(_add_props)
-        .reduceColumns(ee.Reducer.toList(3), ["day", "cloudPct", "images"])
-        .get("list")
-        .getInfo()
+        .filterDate(start, end)
     )
 
-    df = pd.DataFrame(triples, columns=["day", "cloudPct", "images"]).dropna()
-    df["cloudPct"] = df["cloudPct"].astype(float)
-    df["images"] = df["images"].astype(str)
+    csp = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED")
+
+    ic = (
+        s2
+        .linkCollection(csp, ["cs_cdf"])
+        .select(["cs_cdf"])
+    )
+    ids = ic.aggregate_array("system:index").getInfo()
+    df_ids = pd.DataFrame({"id": ids})
+
+
+    region_scale = edge_size * 10 / 2
+
+
+    try:
+        raw = ic.getRegion(geometry=center, scale=region_scale).getInfo()
+    except ee.ee_exception.EEException as e:
+        if "No bands in collection" in str(e):
+            return pd.DataFrame(
+                columns=["id", "cs_cdf", "date", "high_null_flag"]
+            )
+        raise 
+
+    df_raw = pd.DataFrame(raw[1:], columns=raw[0])
+
+
+    df = (
+        df_ids
+        .merge(df_raw, on="id", how="left")
+        .assign(
+            date=lambda d: pd.to_datetime(d["id"].str[:8], format="%Y%m%d").dt.strftime("%Y-%m-%d"),
+            high_null_flag=lambda d: d["cs_cdf"].isna().astype(int),
+        )
+        .drop(columns=["longitude", "latitude", "time"])
+    )
+
+    df["cs_cdf"] = df["cs_cdf"].fillna(df.groupby("date")["cs_cdf"].transform("mean"))
+
     return df
 
 
-def cloud_table(
+def s2_cloud_table(
     lon: float,
     lat: float,
     edge_size: int = 2048,
-    scale: int = 10,
     start: str = "2017-01-01",
     end: str = "2024-12-31",
-    cloud_max: float = 7.0,
-    bands: Optional[List[str]] = None,
-    collection: str = "COPERNICUS/S2_HARMONIZED",
-    output_path: str | pathlib.Path | None = None,
+    cscore: float = 0.5,
     cache: bool = True,
     verbose: bool = True,
 ) -> pd.DataFrame:
@@ -161,23 +143,10 @@ def cloud_table(
     pandas.DataFrame
         Filtered cloud table with ``.attrs`` containing the call parameters.
     """
-    if bands is None:
-        bands = [
-            "B1",
-            "B2",
-            "B3",
-            "B4",
-            "B5",
-            "B6",
-            "B7",
-            "B8",
-            "B8A",
-            "B9",
-            "B10",
-            "B11",
-            "B12",
-        ]
 
+    bands = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B10", "B11", "B12"]
+    collection = "COPERNICUS/S2_HARMONIZED"
+    scale = 10
     cache_file = _cache_key(lon, lat, edge_size, scale, collection)
 
     # ─── 1. Load cached data if present ────────────────────────────────────
@@ -185,7 +154,7 @@ def cloud_table(
         if verbose:
             print("📂  Loading cached table …")
         df_cached = pd.read_parquet(cache_file)
-        have_idx = pd.to_datetime(df_cached["day"], errors="coerce").dropna()
+        have_idx = pd.to_datetime(df_cached["date"], errors="coerce").dropna()
 
         cached_start = have_idx.min().date()
         cached_end = have_idx.max().date()
@@ -204,39 +173,40 @@ def cloud_table(
                 a1, b1 = start, cached_start.isoformat()
                 df_new_parts.append(
                     _cloud_table_single_range(
-                        lon, lat, edge_size, scale, a1, b1, collection
+                        lon, lat, edge_size, a1, b1
                     )
                 )
             if dt.date.fromisoformat(end) > cached_end:
                 a2, b2 = cached_end.isoformat(), end
                 df_new_parts.append(
                     _cloud_table_single_range(
-                        lon, lat, edge_size, scale, a2, b2, collection
+                        lon, lat, edge_size, a2, b2
                     )
                 )
             df_new = pd.concat(df_new_parts, ignore_index=True)
             df_full = (
                 pd.concat([df_cached, df_new], ignore_index=True)
-                .drop_duplicates("day")
-                .sort_values("day", kind="mergesort")
+                .sort_values("date", kind="mergesort")
             )
     else:
-        # No cache or caching disabled: fetch full range.
+
         if verbose:
             msg = "Generating table (no cache found)…" if cache else "Generating table…"
             print("⏳", msg)
         df_full = _cloud_table_single_range(
-            lon, lat, edge_size, scale, start, end, collection
+            lon, lat, edge_size, start, end
         )
+        
 
     # ─── 2. Save cache ─────────────────────────────────────────────────────
     if cache:
         df_full.to_parquet(cache_file, compression="zstd")
 
     # ─── 3. Filter by cloud cover and requested date window ────────────────
+    
     result = (
-        df_full.query("@start <= day <= @end")
-        .query("cloudPct < @cloud_max")
+        df_full.query("@start <= date <= @end")
+        .query("cs_cdf > @cscore")
         .reset_index(drop=True)
     )
 
@@ -248,9 +218,7 @@ def cloud_table(
             "edge_size": edge_size,
             "scale": scale,
             "bands": bands,
-            "collection": collection,
-            "cloud_max": cloud_max,
-            "output_path": str(output_path) if output_path else "",
+            "collection": collection
         }
     )
     return result

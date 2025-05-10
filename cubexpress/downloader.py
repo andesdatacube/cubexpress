@@ -21,7 +21,11 @@ import ee
 import rasterio as rio
 from rasterio.io import MemoryFile
 import logging
+from rasterio.merge import merge
+from rasterio.enums import Resampling
 import os
+import shutil
+import tempfile
 
 os.environ['CPL_LOG_ERRORS'] = 'OFF'
 logging.getLogger('rasterio._env').setLevel(logging.ERROR)
@@ -50,10 +54,10 @@ def download_manifest(ulist: Dict[str, Any], full_outname: pathlib.Path) -> None
                 driver="GTiff", 
                 tiled=True,
                 interleave="band",
-                blockxsize=256,
+                blockxsize=256, # TODO: Creo que es 128 (por de la superresolucion)
                 blockysize=256,
                 compress="ZSTD",
-                zstd_level=13,
+                # zstd_level=13,
                 predictor=2,
                 num_threads=20,
                 nodata=65535,
@@ -65,13 +69,11 @@ def download_manifest(ulist: Dict[str, Any], full_outname: pathlib.Path) -> None
             with rio.open(full_outname, "w", **profile) as dst:
                 dst.write(src.read())
 
-    print(f"{full_outname} downloaded successfully.")  # noqa: T201
-
-
 def download_manifests(
-    manifests: List[Dict[str, Any]],
-    max_workers: int,
+    manifests: list[Dict[str, Any]],
     full_outname: pathlib.Path,
+    join: bool = True,
+    max_workers: int = 4,
 ) -> None:
     """Download every manifest in *manifests* concurrently.
 
@@ -79,6 +81,12 @@ def download_manifests(
     ``full_outname.parent/full_outname.stem`` with names ``000000.tif``,
     ``000001.tif`` … according to the list order.
     """
+    # full_outname = pathlib.Path("/home/contreras/Documents/GitHub/cubexpress/cubexpress_test/2017-08-19_6mfrw_18LVN.tif")
+    original_dir = full_outname.parent
+    if join:
+        tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="s2tmp_"))
+        full_outname = tmp_dir / full_outname.name
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
 
@@ -93,3 +101,35 @@ def download_manifests(
                 fut.result()
             except Exception as exc:  # noqa: BLE001
                 print(f"Error en una de las descargas: {exc}")  # noqa: T201
+
+    dir_path = full_outname.parent / full_outname.stem
+    input_files = sorted(dir_path.glob("*.tif"))
+
+    if dir_path.exists() and len(input_files) > 1:
+
+        with rio.Env(GDAL_NUM_THREADS="8", NUM_THREADS="8"):
+            srcs = [rio.open(fp) for fp in input_files]
+            mosaic, out_transform = merge(
+                srcs,
+                nodata=65535,
+                resampling=Resampling.nearest
+            )
+
+            meta = srcs[0].profile.copy()
+            meta["transform"] = out_transform
+            meta.update(
+                height=mosaic.shape[1],
+                width=mosaic.shape[2]
+            )
+            outname = original_dir / full_outname.name
+            outname.parent.mkdir(parents=True, exist_ok=True)
+            with rio.open(outname, "w", **meta) as dst:
+                dst.write(mosaic)
+
+            for src in srcs:
+                src.close()
+
+        # Delete a folder with pathlib
+        shutil.rmtree(dir_path) 
+    else:
+        return outname

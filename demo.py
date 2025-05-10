@@ -1,23 +1,31 @@
-import ee # pygeohash
+import ee
 import cubexpress
 
 ee.Initialize()
 
 
-df = cubexpress.s2_cloud_table( # Generanting table .... Además guardarla para luego (por tiempo y cloud_maz)
-    lon=-75,
+init_df = cubexpress.s2_cloud_table(
+    lon=-75, # Adicionar si no quiere datos nulos, es decir que no caiga fuera de un foorprint
     lat=-11,
-    edge_size=2_048,
-    cscore=0,
+    edge_size=2048,
+    min_cscore=0.6,
     start= "2017-03-01",
-    end="2017-05-01"
+    end="2017-09-01"
 )
 
-requests = cubexpress.table_to_requestset(df)
-
-requests._dataframe
-
-cubexpress.get_cube(
-    requests= requests, 
-    outfolder = "cubexpress_test"
+download_df = cubexpress.get_cube(
+    table = init_df, # validator que si no contiene datos decirlo, tus parametros no son suficiente para generar un cubo
+    outfolder = "cubexpress_test", # Podria la salida ser un tabla de lo que se descargo, porque no seria siempre una tabla completa
 )
+
+
+
+
+adfdsaf["outname"] + "asfasdf"
+
+
+adfdsaf["outname"] = outfolder / adfdsaf["outname"]  + "sadf"
+
+
+
+download_df.drop(columns=["manifest", "scale_x", "scale_y", "lon", "lat", "x", "y"])

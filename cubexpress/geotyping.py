@@ -306,11 +306,15 @@ class RequestSet(BaseModel):
                             "crsCode": meta.raster_transform.crs,
                         },
                     },
+                    "cs_cdf": int(meta.id.split("_")[-1]) / 100,
+                    "date": meta.id.split("_")[0],
                     "outname": f"{meta.id}.tif",
                 }
+                
                 for index, meta in enumerate(self.requestset)
             ]
         )
+
 
 
     def _validate_dataframe_schema(self) -> None:
@@ -367,21 +371,7 @@ class RequestSet(BaseModel):
                             f"Column '{col_name}' has an invalid type in row {i}. "
                             f"Expected {expected_type}, got {type(value)}"
                         )
-
-        # B) Validation of the `manifest` column structure
-        #    - Must contain at least 'assetId' or 'expression'
-        #    - Must contain 'grid' with the minimum required sub-keys
-        #    - Example:
-        #         {
-        #           "fileFormat": "GEO_TIFF",
-        #           "bandIds": [...],
-        #           "grid": {
-        #              "dimensions": {"width": ..., "height": ...},
-        #              "affineTransform": {...},
-        #              "crsCode": ...
-        #           },
-        #           // Either "assetId" or "expression" must be here
-        #         }
+                    
         for i, row in self._dataframe.iterrows():
             manifest = row["manifest"]
 
@@ -482,7 +472,7 @@ class RequestSet(BaseModel):
             str: A string representation of the entire RasterTransformSet.
         """
         num_entries = len(self.requestset)
-        return f"RasterTransformSet({num_entries} entries)"
+        return f"RequestSet({num_entries} entries)"
 
     def __str__(self):
         return super().__repr__()

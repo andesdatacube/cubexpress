@@ -1,5 +1,5 @@
 from cubexpress.conversion import lonlat2rt, geo2utm
-from cubexpress.geotyping import RasterTransform, Request, RequestSet
+from cubexpress.geotyping import RasterTransform, Request, RequestSet, GeotransformDict
 from cubexpress.cloud_utils import s2_cloud_table
 from cubexpress.cube import get_cube
 from cubexpress.request import table_to_requestset
@@ -11,6 +11,7 @@ from cubexpress.request import table_to_requestset
 __all__ = [
     "lonlat2rt",
     "RasterTransform",
+    "GeotransformDict",
     "Request",
     "RequestSet",
     "geo2utm",
@@ -19,7 +20,7 @@ __all__ = [
     "table_to_requestset"
 ]
 
-# Dynamic version import
-import importlib.metadata
+# # Dynamic version import
+# import importlib.metadata
 
-__version__ = importlib.metadata.version("cubexpress")
+# __version__ = importlib.metadata.version("cubexpress")

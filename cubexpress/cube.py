@@ -14,23 +14,23 @@ The core download/split logic lives in *cubexpress.downloader* and
 from __future__ import annotations
 
 import pathlib
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any
 import ee
+from tqdm import tqdm
 
 
 from cubexpress.downloader import download_manifest, download_manifests
 from cubexpress.geospatial import quadsplit_manifest, calculate_cell_size
 from cubexpress.request import table_to_requestset
 import pandas as pd
+from cubexpress.geotyping import RequestSet
 
 
 def get_geotiff(
     manifest: Dict[str, Any],
     full_outname: pathlib.Path | str,
-    join: bool = True,
-    nworks: int = 4,
-    verbose: bool = True,
+    nworks: int = 4
 ) -> None:
     """Download *manifest* to *full_outname*, retrying with tiled requests.
 
@@ -43,28 +43,30 @@ def get_geotiff(
     nworks
         Maximum worker threads when the image must be split; default **4**.
     """
-    full_outname = pathlib.Path(full_outname)
+    
     try:
-        download_manifest(manifest, full_outname)
+        download_manifest(
+            ulist=manifest, 
+            full_outname=full_outname
+        )
     except ee.ee_exception.EEException as err:
-
-        size = manifest["grid"]["dimensions"]["width"]  # square images assumed
+        size = manifest["grid"]["dimensions"]["width"]
         cell_w, cell_h, power = calculate_cell_size(str(err), size)
         tiled = quadsplit_manifest(manifest, cell_w, cell_h, power)
-        download_manifests(tiled, full_outname, join, nworks)
-
-    if verbose:
-        print(f"Downloaded {full_outname}")
-
+        
+        download_manifests(
+            manifests=tiled,
+            full_outname=full_outname,
+            max_workers=nworks
+        )
 
 def get_cube(
-    table: pd.DataFrame,
+    # table: pd.DataFrame,
+    requests: pd.DataFrame | RequestSet,
     outfolder: pathlib.Path | str,
-    mosaic: bool = True,
-    join: bool = True,
+    # mosaic: bool = True,
     nworks: int = 4,
-    verbose: bool = True,
-    cache: bool = True
+    cache: bool = False
 ) -> None:
     """Download every request in *requests* to *outfolder* using a thread pool.
 
@@ -81,39 +83,58 @@ def get_cube(
         Pool size for concurrent downloads; default **4**.
     """
 
-    requests = table_to_requestset(
-        table=table, 
-        mosaic=mosaic
-    )
-    
+    # requests = table_to_requestset(
+    #     table=table, 
+    #     mosaic=mosaic
+    # )
     outfolder = pathlib.Path(outfolder).expanduser().resolve()
+    dataframe = requests._dataframe if isinstance(requests, RequestSet) else requests
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=nworks) as pool:
-        futures = []
-        for _, row in requests._dataframe.iterrows():
-            outname = pathlib.Path(outfolder) / f"{row.id}.tif"
-            if outname.exists() and cache:
-                continue
-            outname.parent.mkdir(parents=True, exist_ok=True)
-            futures.append(
-                pool.submit(
-                    get_geotiff, 
-                    row.manifest, 
-                    outname, 
-                    join, 
-                    nworks, 
-                    verbose
-                )
-            )
-
-        for fut in concurrent.futures.as_completed(futures):
+    with ThreadPoolExecutor(max_workers=nworks) as executor:
+        futures = {
+            executor.submit(
+                get_geotiff,
+                manifest=row.manifest,
+                full_outname=pathlib.Path(outfolder) / f"{row.id}.tif",
+                nworks=nworks
+            ): row.id for _, row in dataframe.iterrows()
+        }
+        for future in tqdm(as_completed(futures), total=len(futures)):
             try:
-                fut.result()
-            except Exception as exc:  # noqa: BLE001 – log and keep going
-                print(f"Download error: {exc}")
+                future.result()
+            except Exception as exc:
+                print(f"Download error for {futures[future]}: {exc}")
 
-    download_df = requests._dataframe[["outname", "cs_cdf", "date"]].copy()
-    download_df["outname"] = outfolder / requests._dataframe["outname"]
-    download_df.rename(columns={"outname": "full_outname"}, inplace=True)
+    # with ThreadPoolExecutor(max_workers=nworks) as pool:
+    #     futures = []
+    #     for _, row in requests._dataframe.iterrows():
+    #         outname = pathlib.Path(outfolder) / f"{row.id}.tif"
 
-    return download_df
+    #         outname.parent.mkdir(parents=True, exist_ok=True)
+    #         futures.append(
+    #             pool.submit(
+    #                 get_geotiff, 
+    #                 row.manifest,                     
+    #                 outname, # full_outname = outname
+    #                 nworks, # nworks = nworks
+    #                 verbose # verbose = verbose
+    #             )
+    #         )
+
+    #     for fut in concurrent.futures.as_completed(futures):
+    #         try:
+    #             fut.result()
+    #         except Exception as exc:  # noqa: BLE001 – log and keep going
+    #             print(f"Download error: {exc}")
+
+    # download_df = requests._dataframe[["outname", "cs_cdf", "date"]].copy()
+    # download_df["outname"] = outfolder / requests._dataframe["outname"]
+    # download_df.rename(columns={"outname": "full_outname"}, inplace=True)
+
+    # return 
+
+# manifest = row.manifest
+# full_outname = outname
+# join: bool = True,
+# nworks: int = 4,
+# verbose: bool = True,

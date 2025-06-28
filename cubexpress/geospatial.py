@@ -2,6 +2,11 @@ import ee
 import re
 from copy import deepcopy
 from typing import Dict
+import pathlib
+import rasterio as rio
+from rasterio.merge import merge
+from rasterio.enums import Resampling
+
 
 
 def quadsplit_manifest(manifest: Dict, cell_width: int, cell_height: int, power: int) -> list[Dict]:
@@ -27,8 +32,6 @@ def quadsplit_manifest(manifest: Dict, cell_width: int, cell_height: int, power:
 
     return manifests
 
-
-
 def calculate_cell_size(ee_error_message: str, size: int) -> tuple[int, int]:
     match = re.findall(r'\d+', ee_error_message)
     image_pixel = int(match[0])
@@ -53,3 +56,66 @@ def _square_roi(lon: float, lat: float, edge_size: int, scale: int) -> ee.Geomet
     half = edge_size * scale / 2
     point = ee.Geometry.Point([lon, lat])
     return point.buffer(half).bounds()
+
+
+
+def merge_tifs(
+    input_files: list[pathlib.Path],
+    output_path: pathlib.Path,
+    *,
+    nodata: int = 65535,
+    gdal_threads: int = 8
+) -> None:
+    """
+    Merge a list of GeoTIFF files into a single mosaic and write it out.
+
+    Parameters
+    ----------
+    input_files : list[Path]
+        Paths to the GeoTIFF tiles to be merged.
+    output_path : Path
+        Destination path for the merged GeoTIFF.
+    nodata : int, optional
+        NoData value to assign in the mosaic (default: 65535).
+    gdal_threads : int, optional
+        Number of GDAL threads to use for reading/writing (default: 8).
+
+    Raises
+    ------
+    ValueError
+        If `input_files` is empty.
+    """
+    if not input_files:
+        raise ValueError("The input_files list is empty")
+
+    # Ensure output path is a Path object
+    output_path = pathlib.Path(output_path).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Set GDAL threading environment
+    with rio.Env(GDAL_NUM_THREADS=str(gdal_threads), NUM_THREADS=str(gdal_threads)):
+        # Open all source datasets
+        srcs = [rio.open(fp) for fp in input_files]
+        try:
+            # Merge sources into one mosaic
+            mosaic, out_transform = merge(
+                srcs,
+                nodata=nodata,
+                resampling=Resampling.nearest
+            )
+
+            # Copy metadata from the first source and update it
+            meta = srcs[0].profile.copy()
+            meta.update({
+                "transform": out_transform,
+                "height": mosaic.shape[1],
+                "width": mosaic.shape[2]
+            })
+
+            # Write the merged mosaic to disk
+            with rio.open(output_path, "w", **meta) as dst:
+                dst.write(mosaic)
+        finally:
+            # Always close all open datasets
+            for src in srcs:
+                src.close()

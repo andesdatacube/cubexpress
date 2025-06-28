@@ -13,24 +13,26 @@ from __future__ import annotations
 
 import json
 import pathlib
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import ee
 import rasterio as rio
 from rasterio.io import MemoryFile
 import logging
-from rasterio.merge import merge
-from rasterio.enums import Resampling
 import os
 import shutil
 import tempfile
+from cubexpress.geospatial import merge_tifs
 
 os.environ['CPL_LOG_ERRORS'] = 'OFF'
 logging.getLogger('rasterio._env').setLevel(logging.ERROR)
 
-def download_manifest(ulist: Dict[str, Any], full_outname: pathlib.Path) -> None:
+def download_manifest(
+    ulist: Dict[str, Any], 
+    full_outname: pathlib.Path
+) -> None:
     """Download *ulist* and save it as *full_outname*.
 
     The manifest must include either an ``assetId`` or an ``expression``
@@ -46,34 +48,36 @@ def download_manifest(ulist: Dict[str, Any], full_outname: pathlib.Path) -> None
         images_bytes = ee.data.computePixels(ulist_deep)
     else:  # pragma: no cover
         raise ValueError("Manifest does not contain 'assetId' or 'expression'")
+    
+    with open(full_outname, "wb") as src:
+        src.write(images_bytes)
 
-    with MemoryFile(images_bytes) as memfile:
-        with memfile.open() as src:
-            profile = src.profile
-            profile.update(
-                driver="GTiff", 
-                tiled=True,
-                interleave="band",
-                blockxsize=256, # TODO: Creo que es 128 (por de la superresolucion)
-                blockysize=256,
-                compress="ZSTD",
-                # zstd_level=13,
-                predictor=2,
-                num_threads=20,
-                nodata=65535,
-                dtype="uint16",
-                count=13,
-                photometric="MINISBLACK"
-            )
+    # with MemoryFile(images_bytes) as memfile:
+    #     with memfile.open() as src:
+    #         profile = src.profile
+    #         profile.update(
+    #             driver="GTiff", 
+    #             tiled=True,
+    #             interleave="band",
+    #             blockxsize=256,
+    #             blockysize=256,
+    #             compress="ZSTD",
+    #             zstd_level=13,
+    #             predictor=2,
+    #             num_threads=20,
+    #             nodata=65535,
+    #             dtype="uint16",
+    #             count=12,
+    #             photometric="MINISBLACK"
+    #         )
 
-            with rio.open(full_outname, "w", **profile) as dst:
-                dst.write(src.read())
+    #         with rio.open(full_outname, "w", **profile) as dst:
+    #             dst.write(src.read())
 
 def download_manifests(
     manifests: list[Dict[str, Any]],
     full_outname: pathlib.Path,
-    join: bool = True,
-    max_workers: int = 4,
+    max_workers: int,
 ) -> None:
     """Download every manifest in *manifests* concurrently.
 
@@ -82,54 +86,27 @@ def download_manifests(
     ``000001.tif`` … according to the list order.
     """
     # full_outname = pathlib.Path("/home/contreras/Documents/GitHub/cubexpress/cubexpress_test/2017-08-19_6mfrw_18LVN.tif")
-    original_dir = full_outname.parent
-    if join:
-        tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="s2tmp_"))
-        full_outname = tmp_dir / full_outname.name
+    tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="cubexpress_"))
+    full_outname_temp = tmp_dir / full_outname.stem
+    full_outname_temp.mkdir(parents=True, exist_ok=True)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-
-        for index, umanifest in enumerate(manifests):
-            folder = full_outname.parent / full_outname.stem
-            folder.mkdir(parents=True, exist_ok=True)
-            outname = folder / f"{index:06d}.tif"
-            futures.append(executor.submit(download_manifest, umanifest, outname))
-
-        for fut in concurrent.futures.as_completed(futures):
+    with ThreadPoolExecutor(max_workers=max_workers) as exe: # -
+        futures = {
+            exe.submit(
+                download_manifest, 
+                ulist=umanifest, 
+                full_outname=full_outname_temp / f"{index:06d}.tif" 
+            ): umanifest for index, umanifest in enumerate(manifests)               
+        }
+        for future in as_completed(futures):
             try:
-                fut.result()
-            except Exception as exc:  # noqa: BLE001
-                print(f"Error en una de las descargas: {exc}")  # noqa: T201
-
-    dir_path = full_outname.parent / full_outname.stem
-    input_files = sorted(dir_path.glob("*.tif"))
-
-    if dir_path.exists() and len(input_files) > 1:
-
-        with rio.Env(GDAL_NUM_THREADS="8", NUM_THREADS="8"):
-            srcs = [rio.open(fp) for fp in input_files]
-            mosaic, out_transform = merge(
-                srcs,
-                nodata=65535,
-                resampling=Resampling.nearest
-            )
-
-            meta = srcs[0].profile.copy()
-            meta["transform"] = out_transform
-            meta.update(
-                height=mosaic.shape[1],
-                width=mosaic.shape[2]
-            )
-            outname = original_dir / full_outname.name
-            outname.parent.mkdir(parents=True, exist_ok=True)
-            with rio.open(outname, "w", **meta) as dst:
-                dst.write(mosaic)
-
-            for src in srcs:
-                src.close()
-
-        # Delete a folder with pathlib
-        shutil.rmtree(dir_path) 
+                future.result()
+            except Exception as exc:
+                print(f"Error in one of the downloads: {exc}")
+        
+    if full_outname_temp.exists():
+        input_files = sorted(full_outname_temp.glob("*.tif"))
+        merge_tifs(input_files, full_outname)
+        shutil.rmtree(full_outname_temp) 
     else:
-        return outname
+        raise ValueError(f"Error in {full_outname}")

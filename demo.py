@@ -15,17 +15,6 @@ init_df = cubexpress.s2_cloud_table(
 
 download_df = cubexpress.get_cube(
     table = init_df, # validator que si no contiene datos decirlo, tus parametros no son suficiente para generar un cubo
-    outfolder = "cubexpress_test", # Podria la salida ser un tabla de lo que se descargo, porque no seria siempre una tabla completa
+    outfolder = "raw", # Podria la salida ser un tabla de lo que se descargo, porque no seria siempre una tabla completa
+    cache=False
 )
-
-
-
-
-adfdsaf["outname"] + "asfasdf"
-
-
-adfdsaf["outname"] = outfolder / adfdsaf["outname"]  + "sadf"
-
-
-
-download_df.drop(columns=["manifest", "scale_x", "scale_y", "lon", "lat", "x", "y"])

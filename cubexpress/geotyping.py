@@ -259,13 +259,8 @@ class RequestSet(BaseModel):
     def create_manifests(self) -> pd.DataFrame:
         """
         Exports the raster metadata to a pandas DataFrame.
-
         Returns:
             pd.DataFrame: A DataFrame containing the metadata for all entries.
-
-        Example:
-            >>> df = raster_transform_set.export_df()
-            >>> print(df)
         """
         # Use ProcessPoolExecutor for CPU-bound tasks to convert raster transforms to lon/lat
         with ProcessPoolExecutor(max_workers=None) as executor:
@@ -306,8 +301,8 @@ class RequestSet(BaseModel):
                             "crsCode": meta.raster_transform.crs,
                         },
                     },
-                    "cs_cdf": int(meta.id.split("_")[-1]) / 100,
-                    "date": meta.id.split("_")[0],
+                    # "cs_cdf": int(meta.id.split("_")[-1]) / 100,
+                    # "date": meta.id.split("_")[0],
                     "outname": f"{meta.id}.tif",
                 }
                 

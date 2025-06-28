@@ -31,7 +31,6 @@ def table_to_requestset(
         If *df* is empty after filtering.
 
     """
-
     
     df = table.copy()
 
@@ -47,18 +46,27 @@ def table_to_requestset(
     centre_hash = pgh.encode(df.attrs["lat"], df.attrs["lon"], precision=5)
     reqs: list[Request] = []
 
-
-
     if mosaic:
+
         grouped = (
-        df.groupby('date')
+            df.groupby('date')
             .agg(
-                id_list      = ('id', list),
-                cs_cdf_mean  = ('cs_cdf', lambda x: int(round(x.mean(), 2) * 100))
+                id_list     = ('id', list),
+                tiles       = (
+                    'id',
+                    lambda ids: ','.join(
+                        sorted({i.split('_')[-1][1:] for i in ids})
+                    )
+                ),
+                cs_cdf_mean = (
+                    'cs_cdf',
+                    lambda x: int(round(x.mean(), 2) * 100)
+                )
             )
         )
 
         for day, row in grouped.iterrows():
+            
             
             img_ids   = row["id_list"]
             cdf  = row["cs_cdf_mean"]
@@ -79,10 +87,11 @@ def table_to_requestset(
                 )
             else:
                 for img_id in img_ids:
-                    tile = img_id.split("_")[-1][1:]
+                    # tile = img_id.split("_")[-1][1:]
                     reqs.append(
                         Request(
-                            id=f"{day}_{centre_hash}_{tile}_{cdf}",
+                            # id=f"{day}_{centre_hash}_{tile}_{cdf}",
+                            id=f"{day}_{centre_hash}_{cdf}",
                             raster_transform=rt,
                             image=f"{df.attrs['collection']}/{img_id}",
                             bands=df.attrs["bands"],
@@ -91,13 +100,12 @@ def table_to_requestset(
     else:
         for _, row in df.iterrows():
             img_id = row["id"]
-            tile = img_id.split("_")[-1][1:]
+            # tile = img_id.split("_")[-1][1:]
             day = row["date"]
             cdf = int(round(row["cs_cdf"], 2) * 100)
-
             reqs.append(
                 Request(
-                    id=f"{day}_{centre_hash}_{tile}_{cdf}",
+                    id=f"{day}_{centre_hash}_{cdf}",
                     raster_transform=rt,
                     image=f"{df.attrs['collection']}/{img_id}",
                     bands=df.attrs["bands"],

@@ -162,7 +162,7 @@ def s2_table(
         Filtered cloud table with ``.attrs`` containing the call parameters.
     """
 
-    bands = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B10", "B11", "B12"]
+    bands = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B11", "B12"]
     collection = "COPERNICUS/S2_SR_HARMONIZED"
     scale = 10
     cache_file = _cache_key(lon, lat, edge_size, scale, collection)

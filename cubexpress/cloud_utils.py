@@ -111,20 +111,9 @@ def _cloud_table_single_range(
             else group['cs_cdf'].mean()
         )
     ).reset_index(drop=True)
-
-<<<<<<< HEAD
+    
     return df_raw
-=======
-    # fill missing scores with daily mean
-    df["lon"] = lon
-    df["lat"] = lat
-    df["cs_cdf"] = df["cs_cdf"].fillna(df.groupby("date")["cs_cdf"].transform("mean"))
-
-
-    return df
->>>>>>> origin/main
-
-
+    
 def s2_table(
     lon: float,
     lat: float,

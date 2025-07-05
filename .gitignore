@@ -5,7 +5,18 @@ demo/
 demo2.py
 borrador/
 images_s2/
+table/
 raw/
+s2_download/
+s2_table/
+table/
+df_raw.csv
+df_raw2.csv
+s2_l2a_gee_geom_download.csv
+s2_l2a_gee.csv
+try.py
+satcube.py
+
 # From https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
 
 # Byte-compiled / optimized / DLL files

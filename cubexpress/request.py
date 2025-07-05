@@ -11,9 +11,9 @@ from cubexpress.conversion import lonlat2rt
 
 
 def table_to_requestset(
-        table: pd.DataFrame, 
-        mosaic: bool = True
-    ) -> RequestSet:
+    table: pd.DataFrame, 
+    mosaic: bool = True
+) -> RequestSet:
     """Return a :class:`RequestSet` built from *df* (cloud_table result).
 
     Parameters
@@ -35,7 +35,7 @@ def table_to_requestset(
     df = table.copy()
 
     if df.empty:
-        raise ValueError("cloud_table returned no rows; nothing to request.")
+        raise ValueError("There are no images in the requested period. Please check your dates or your ubication.")
 
     rt = lonlat2rt(
         lon=df.attrs["lon"],
@@ -43,11 +43,11 @@ def table_to_requestset(
         edge_size=df.attrs["edge_size"],
         scale=df.attrs["scale"],
     )
+    
     centre_hash = pgh.encode(df.attrs["lat"], df.attrs["lon"], precision=5)
-    reqs: list[Request] = []
+    reqs = []
 
     if mosaic:
-
         grouped = (
             df.groupby('date')
             .agg(
@@ -66,8 +66,6 @@ def table_to_requestset(
         )
 
         for day, row in grouped.iterrows():
-            
-            
             img_ids   = row["id_list"]
             cdf  = row["cs_cdf_mean"]
             
@@ -100,12 +98,14 @@ def table_to_requestset(
     else:
         for _, row in df.iterrows():
             img_id = row["id"]
-            # tile = img_id.split("_")[-1][1:]
+            tile = img_id.split("_")[-1][1:]
             day = row["date"]
             cdf = int(round(row["cs_cdf"], 2) * 100)
             reqs.append(
                 Request(
-                    id=f"{day}_{centre_hash}_{cdf}",
+                    # id=f"{day}_{centre_hash}_{cdf}",
+                    # id=f"{day}_{centre_hash}_{tile}_{cdf}",
+                    id=f"{day}_{tile}_{cdf}",
                     raster_transform=rt,
                     image=f"{df.attrs['collection']}/{img_id}",
                     bands=df.attrs["bands"],

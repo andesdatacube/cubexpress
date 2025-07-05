@@ -15,9 +15,11 @@ from __future__ import annotations
 import datetime as dt
 import ee
 import pandas as pd
-
 from cubexpress.cache import _cache_key
+import datetime as dt
 from cubexpress.geospatial import _square_roi
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 
 def _cloud_table_single_range(
@@ -55,61 +57,65 @@ def _cloud_table_single_range(
 
     center = ee.Geometry.Point([lon, lat])
     roi = _square_roi(lon, lat, edge_size, 10)
-
+    
     s2 = (
-        ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterBounds(roi)
         .filterDate(start, end)
     )
-
-    csp = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED")
-
     ic = (
         s2
-        .linkCollection(csp, ["cs_cdf"])
+        .linkCollection(
+            ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"), 
+            ["cs_cdf"]
+        )
         .select(["cs_cdf"])
     )
-
-    # image IDs for every expected date
-    ids = ic.aggregate_array("system:index").getInfo()
-    df_ids = pd.DataFrame({"id": ids})
-
-
-    region_scale = edge_size * 10 / 2
-
-
+    ids_inside = (
+        ic                              
+        .map(                           
+            lambda img: img.set(
+                'roi_inside_scene',
+                img.geometry().contains(roi, maxError=10)
+            )
+        )
+        .filter(ee.Filter.eq('roi_inside_scene', True))
+        .aggregate_array('system:index')               
+        .getInfo()
+    )
+    
     try:
-        raw = ic.getRegion(geometry=center, scale=region_scale).getInfo()
+        raw = ic.getRegion(
+            geometry=center,
+            scale=(edge_size) * 11
+        ).getInfo()
     except ee.ee_exception.EEException as e:
         if "No bands in collection" in str(e):
             return pd.DataFrame(
-                columns=["id", "cs_cdf", "date", "null_flag"]
+                columns=["id", "longitude", "latitude", "time", "cs_cdf", "inside"]
             )
-        raise 
-
-    df_raw = pd.DataFrame(raw[1:], columns=raw[0])
-
-
-    df = (
-        df_ids
-        .merge(df_raw, on="id", how="left")
+        raise e
+    
+    df_raw = (
+        pd.DataFrame(raw[1:], columns=raw[0])
+        .drop(columns=["longitude", "latitude"])
         .assign(
-            date=lambda d: pd.to_datetime(d["id"].str[:8], format="%Y%m%d").dt.strftime("%Y-%m-%d"),
-            null_flag=lambda d: d["cs_cdf"].isna().astype(int),
+            date=lambda d: pd.to_datetime(d["id"].str[:8], format="%Y%m%d").dt.strftime("%Y-%m-%d")
         )
-        .drop(columns=["longitude", "latitude", "time"])
     )
+    df_raw["inside"] = df_raw["id"].isin(set(ids_inside)).astype(int)
+    df_raw['cs_cdf'] = df_raw.groupby('date').apply(
+        lambda group: group['cs_cdf'].transform(
+            lambda _: group[group['inside'] == 1]['cs_cdf'].iloc[0] 
+            if (group['inside'] == 1).any() 
+            else group['cs_cdf'].mean()
+        )
+    ).reset_index(drop=True)
 
-    # fill missing scores with daily mean
-    df["lon"] = lon
-    df["lat"] = lat
-    df["cs_cdf"] = df["cs_cdf"].fillna(df.groupby("date")["cs_cdf"].transform("mean"))
+    return df_raw
 
 
-    return df
-
-
-def s2_cloud_table(
+def s2_table(
     lon: float,
     lat: float,
     edge_size: int,
@@ -117,8 +123,7 @@ def s2_cloud_table(
     end: str,
     max_cscore: float = 1.0,
     min_cscore: float = 0.0,
-    cache: bool = False,
-    verbose: bool = True,
+    cache: bool = False
 ) -> pd.DataFrame:
     """Build (and cache) a per-day cloud-table for the requested ROI.
 
@@ -147,9 +152,7 @@ def s2_cloud_table(
         Downstream path hint stored in ``result.attrs``; not used internally.
     cache
         Toggle parquet caching.
-    verbose
-        If *True* prints cache info/progress.
-
+    
     Returns
     -------
     pandas.DataFrame
@@ -161,10 +164,9 @@ def s2_cloud_table(
     scale = 10
     cache_file = _cache_key(lon, lat, edge_size, scale, collection)
 
-    # ─── 1. Load cached data if present ────────────────────────────────────
+    # Load cached data if present
     if cache and cache_file.exists():
-        if verbose:
-            print("📂  Loading cached metadata …")
+        print("📂  Loading cached metadata …")
         df_cached = pd.read_parquet(cache_file)
         have_idx = pd.to_datetime(df_cached["date"], errors="coerce").dropna()
 
@@ -175,8 +177,7 @@ def s2_cloud_table(
             dt.date.fromisoformat(start) >= cached_start
             and dt.date.fromisoformat(end) <= cached_end
         ):
-            if verbose:
-                print("✅  Served entirely from metadata.")
+            print("✅  Served entirely from metadata.")
             df_full = df_cached
         else:
             # Identify missing segments and fetch only those.
@@ -185,14 +186,22 @@ def s2_cloud_table(
                 a1, b1 = start, cached_start.isoformat()
                 df_new_parts.append(
                     _cloud_table_single_range(
-                        lon, lat, edge_size, a1, b1
+                        lon=lon, 
+                        lat=lat, 
+                        edge_size=edge_size, 
+                        start=a1, 
+                        end=b1
                     )
                 )
             if dt.date.fromisoformat(end) > cached_end:
                 a2, b2 = cached_end.isoformat(), end
                 df_new_parts.append(
                     _cloud_table_single_range(
-                        lon, lat, edge_size, a2, b2
+                        lon=lon, 
+                        lat=lat, 
+                        edge_size=edge_size, 
+                        start=a2, 
+                        end=b2
                     )
                 )
             df_new_parts = [df for df in df_new_parts if not df.empty]
@@ -207,21 +216,20 @@ def s2_cloud_table(
             else:
                 df_full = df_cached
     else:
-
-        if verbose:
-            msg = "Generating metadata (no cache found)…" if cache else "Generating metadata…"
-            print("⏳", msg)
+        print("⏳ Generating metadata…")
         df_full = _cloud_table_single_range(
-            lon, lat, edge_size, start, end
+            lon=lon, 
+            lat=lat, 
+            edge_size=edge_size, 
+            start=start, 
+            end=end
         )
-        
 
-    # ─── 2. Save cache ─────────────────────────────────────────────────────
+    # Save cache
     if cache:
         df_full.to_parquet(cache_file, compression="zstd")
 
-    # ─── 3. Filter by cloud cover and requested date window ────────────────
-    
+    # Filter by cloud cover and requested date window 
     result = (
         df_full.query("@start <= date <= @end")
         .query("@min_cscore <= cs_cdf <= @max_cscore")

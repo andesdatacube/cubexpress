@@ -63,6 +63,7 @@ def _cloud_table_single_range(
         .filterBounds(roi)
         .filterDate(start, end)
     )
+
     ic = (
         s2
         .linkCollection(
@@ -71,6 +72,7 @@ def _cloud_table_single_range(
         )
         .select(["cs_cdf"])
     )
+       
     ids_inside = (
         ic                              
         .map(                           
@@ -103,7 +105,9 @@ def _cloud_table_single_range(
             date=lambda d: pd.to_datetime(d["id"].str[:8], format="%Y%m%d").dt.strftime("%Y-%m-%d")
         )
     )
+    
     df_raw["inside"] = df_raw["id"].isin(set(ids_inside)).astype(int)
+    
     df_raw['cs_cdf'] = df_raw.groupby('date').apply(
         lambda group: group['cs_cdf'].transform(
             lambda _: group[group['inside'] == 1]['cs_cdf'].iloc[0] 
@@ -111,7 +115,7 @@ def _cloud_table_single_range(
             else group['cs_cdf'].mean()
         )
     ).reset_index(drop=True)
-    
+
     return df_raw
     
 def s2_table(
@@ -159,7 +163,7 @@ def s2_table(
     """
 
     bands = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B10", "B11", "B12"]
-    collection = "COPERNICUS/S2_HARMONIZED"
+    collection = "COPERNICUS/S2_SR_HARMONIZED"
     scale = 10
     cache_file = _cache_key(lon, lat, edge_size, scale, collection)
 

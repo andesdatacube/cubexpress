@@ -61,12 +61,18 @@ def get_geotiff(
         )
 
 def get_cube(
+<<<<<<< HEAD
+    requests: pd.DataFrame | RequestSet,
+    outfolder: pathlib.Path | str,
+    nworks: int = 4,
+=======
     # table: pd.DataFrame,
     requests: pd.DataFrame | RequestSet,
     outfolder: pathlib.Path | str,
     # mosaic: bool = True,
     nworks: int = 4,
     cache: bool = False
+>>>>>>> origin/main
 ) -> None:
     """Download every request in *requests* to *outfolder* using a thread pool.
 
@@ -83,11 +89,17 @@ def get_cube(
         Pool size for concurrent downloads; default **4**.
     """
 
+<<<<<<< HEAD
+
+    outfolder = pathlib.Path(outfolder).expanduser().resolve()
+    outfolder.mkdir(parents=True, exist_ok=True)
+=======
     # requests = table_to_requestset(
     #     table=table, 
     #     mosaic=mosaic
     # )
     outfolder = pathlib.Path(outfolder).expanduser().resolve()
+>>>>>>> origin/main
     dataframe = requests._dataframe if isinstance(requests, RequestSet) else requests
 
     with ThreadPoolExecutor(max_workers=nworks) as executor:
@@ -104,6 +116,8 @@ def get_cube(
                 future.result()
             except Exception as exc:
                 print(f"Download error for {futures[future]}: {exc}")
+<<<<<<< HEAD
+=======
 
     # with ThreadPoolExecutor(max_workers=nworks) as pool:
     #     futures = []
@@ -138,3 +152,4 @@ def get_cube(
 # join: bool = True,
 # nworks: int = 4,
 # verbose: bool = True,
+>>>>>>> origin/main

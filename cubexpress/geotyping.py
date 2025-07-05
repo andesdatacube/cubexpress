@@ -301,8 +301,6 @@ class RequestSet(BaseModel):
                             "crsCode": meta.raster_transform.crs,
                         },
                     },
-                    # "cs_cdf": int(meta.id.split("_")[-1]) / 100,
-                    # "date": meta.id.split("_")[0],
                     "outname": f"{meta.id}.tif",
                 }
                 
@@ -423,18 +421,16 @@ class RequestSet(BaseModel):
     def validate_metadata(self) -> RequestSet:
         """
         Validates that all entries have consistent and valid CRS formats.
-
+        
         Returns:
             RasterTransformSet: The validated instance.
 
         Raises:
             ValueError: If any CRS is invalid or inconsistent.
         """
-        # 1. Pre-consistency validation (CRS, IDs, etc.)
         crs_set: Set[str] = {meta.raster_transform.crs for meta in self.requestset}
         validated_crs: Set[str] = set()
 
-        # Validate CRS formats
         for crs in crs_set:
             if crs not in validated_crs:
                 try:
@@ -443,16 +439,11 @@ class RequestSet(BaseModel):
                 except Exception as e:
                     raise ValueError(f"Invalid CRS format: {crs}") from e
 
-        # Validate ids, they must be unique
         ids = {meta.id for meta in self.requestset}
         if len(ids) != len(self.requestset):
             raise ValueError("All entries must have unique IDs")
 
-        # Upgrade same_coordinates to True if all coordinates are the same
-        # 2. We create the dataframe
         self._dataframe = self.create_manifests()
-        
-        # 3. We validate the structure of the dataframe
         self._validate_dataframe_schema()
 
         return self

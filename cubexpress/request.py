@@ -86,10 +86,8 @@ def table_to_requestset(
                 )
             else:
                 for img_id in img_ids:
-                    # tile = img_id.split("_")[-1][1:]
                     reqs.append(
                         Request(
-                            # id=f"{day}_{centre_hash}_{tile}_{cdf}",
                             id=f"{day}_{centre_hash}_{cdf}",
                             raster_transform=rt,
                             image=f"{df.attrs['collection']}/{img_id}",

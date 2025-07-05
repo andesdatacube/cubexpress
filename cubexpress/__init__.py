@@ -3,11 +3,9 @@ from cubexpress.geotyping import RasterTransform, Request, RequestSet, Geotransf
 from cubexpress.cloud_utils import s2_table
 from cubexpress.cube import get_cube
 from cubexpress.request import table_to_requestset
+import importlib.metadata
 
 
-
-# pyproj
-# Export the functions
 __all__ = [
     "lonlat2rt",
     "RasterTransform",
@@ -19,8 +17,4 @@ __all__ = [
     "s2_table",
     "table_to_requestset"
 ]
-
-# # Dynamic version import
-# import importlib.metadata
-
 # __version__ = importlib.metadata.version("cubexpress")

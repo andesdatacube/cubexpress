@@ -93,7 +93,13 @@ def get_cube(
                 nworks=nworks
             ): row.id for _, row in dataframe.iterrows()
         }
-        for future in tqdm(as_completed(futures), total=len(futures)):
+        for future in tqdm(
+            as_completed(futures), 
+            total=len(futures),
+            desc="Downloading Images",
+            unit="image",
+            leave=True
+        ):
             try:
                 future.result()
             except Exception as exc:

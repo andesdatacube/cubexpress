@@ -46,7 +46,7 @@ def download_manifest(
         ulist_deep = deepcopy(ulist)
         ulist_deep["expression"] = ee_image
         images_bytes = ee.data.computePixels(ulist_deep)
-    else:  # pragma: no cover
+    else:
         raise ValueError("Manifest does not contain 'assetId' or 'expression'")
     
     with open(full_outname, "wb") as src:
@@ -85,7 +85,6 @@ def download_manifests(
     ``full_outname.parent/full_outname.stem`` with names ``000000.tif``,
     ``000001.tif`` … according to the list order.
     """
-    # full_outname = pathlib.Path("/home/contreras/Documents/GitHub/cubexpress/cubexpress_test/2017-08-19_6mfrw_18LVN.tif")
     tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="cubexpress_"))
     full_outname_temp = tmp_dir / full_outname.stem
     full_outname_temp.mkdir(parents=True, exist_ok=True)

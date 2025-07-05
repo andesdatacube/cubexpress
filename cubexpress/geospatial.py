@@ -57,8 +57,6 @@ def _square_roi(lon: float, lat: float, edge_size: int, scale: int) -> ee.Geomet
     point = ee.Geometry.Point([lon, lat])
     return point.buffer(half).bounds()
 
-
-
 def merge_tifs(
     input_files: list[pathlib.Path],
     output_path: pathlib.Path,

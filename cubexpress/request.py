@@ -45,9 +45,14 @@ def table_to_requestset(
     )
     
     centre_hash = pgh.encode(df.attrs["lat"], df.attrs["lon"], precision=5)
+<<<<<<< HEAD
     reqs = []
+=======
+    reqs: list[Request] = []
+>>>>>>> origin/main
 
     if mosaic:
+
         grouped = (
             df.groupby('date')
             .agg(
@@ -66,6 +71,11 @@ def table_to_requestset(
         )
 
         for day, row in grouped.iterrows():
+<<<<<<< HEAD
+=======
+            
+            
+>>>>>>> origin/main
             img_ids   = row["id_list"]
             cdf  = row["cs_cdf_mean"]
             
@@ -98,14 +108,18 @@ def table_to_requestset(
     else:
         for _, row in df.iterrows():
             img_id = row["id"]
-            tile = img_id.split("_")[-1][1:]
+            # tile = img_id.split("_")[-1][1:]
             day = row["date"]
             cdf = int(round(row["cs_cdf"], 2) * 100)
             reqs.append(
                 Request(
+<<<<<<< HEAD
                     # id=f"{day}_{centre_hash}_{cdf}",
                     # id=f"{day}_{centre_hash}_{tile}_{cdf}",
                     id=f"{day}_{tile}_{cdf}",
+=======
+                    id=f"{day}_{centre_hash}_{cdf}",
+>>>>>>> origin/main
                     raster_transform=rt,
                     image=f"{df.attrs['collection']}/{img_id}",
                     bands=df.attrs["bands"],

@@ -1,6 +1,10 @@
 from cubexpress.conversion import lonlat2rt, geo2utm
 from cubexpress.geotyping import RasterTransform, Request, RequestSet, GeotransformDict
+<<<<<<< HEAD
 from cubexpress.cloud_utils import s2_table
+=======
+from cubexpress.cloud_utils import s2_cloud_table
+>>>>>>> origin/main
 from cubexpress.cube import get_cube
 from cubexpress.request import table_to_requestset
 

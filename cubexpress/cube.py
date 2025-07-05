@@ -96,7 +96,7 @@ def get_cube(
         for future in tqdm(
             as_completed(futures), 
             total=len(futures),
-            desc="Downloading Images",
+            desc="Downloading images",
             unit="image",
             leave=True
         ):

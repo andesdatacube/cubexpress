@@ -35,7 +35,7 @@ def table_to_requestset(
     df = table.copy()
 
     if df.empty:
-        raise ValueError("There are no images in the requested period. Please check your dates or your ubication.")
+        raise ValueError("There are no images in the requested period. Please check your dates, ubication or cloud coverage.")
 
     rt = lonlat2rt(
         lon=df.attrs["lon"],

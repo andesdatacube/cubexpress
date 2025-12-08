@@ -1,14 +1,10 @@
-"""Simple file-based cache helpers for cloud_table results."""
-
-from __future__ import annotations
-
 import hashlib
 import json
 import os
 import pathlib
 from typing import Final
 
-# Folder where per-location parquet files are stored.
+# Directory for storing cached metadata files (configurable via env var)
 _CACHE_DIR: Final[pathlib.Path] = pathlib.Path(
     os.getenv("CUBEXPRESS_CACHE", "~/.cubexpress_cache")
 ).expanduser()
@@ -18,33 +14,39 @@ _CACHE_DIR.mkdir(exist_ok=True)
 def _cache_key(
     lon: float,
     lat: float,
-    edge_size: int,
+    edge_size: int | tuple[int, int],
     scale: int,
     collection: str,
 ) -> pathlib.Path:
-    """Return deterministic parquet path for the given query parameters.
-
-    A 128-bit MD5 hash of the rounded coordinates, edge size, scale and
-    collection is used as file name to avoid overly long paths and ensure
-    uniqueness.
-
-    Parameters
-    ----------
-    lon, lat
-        Centre coordinates in decimal degrees; rounded to 4 dp (≈ 11 m).
-    edge_size
-        Edge length in pixels of the requested square ROI.
-    scale
-        Pixel size in metres.
-    collection
-        EE collection name (e.g. ``"COPERNICUS/S2_HARMONIZED"``).
-
-    Returns
-    -------
-    pathlib.Path
-        Absolute path ending in ``.parquet`` under ``_CACHE_DIR``.
     """
+    Generates a deterministic file path for caching query results.
+
+    Hashes the query parameters to create a unique filename. Coordinates
+    are rounded to 4 decimals to ensure cache hits on equivalent locations.
+
+    Args:
+        lon (float): Longitude of the center point.
+        lat (float): Latitude of the center point.
+        edge_size (int | Tuple[int, int]): Size of the ROI in pixels.
+        scale (int): Pixel resolution in meters.
+        collection (str): Earth Engine collection ID.
+
+    Returns:
+        pathlib.Path: Full path to the hashed .parquet cache file.
+    """
+    # Round coordinates to ~11m precision to group nearby requests
     lon_r, lat_r = round(lon, 4), round(lat, 4)
-    raw = json.dumps([lon_r, lat_r, edge_size, scale, collection]).encode()
-    digest = hashlib.md5(raw).hexdigest()  # noqa: S324 – non-cryptographic OK
+    
+    # Normalize edge_size to tuple for consistent hashing
+    if isinstance(edge_size, int):
+        edge_tuple = (edge_size, edge_size)
+    else:
+        edge_tuple = edge_size
+    
+    # Create a unique signature for this request configuration
+    signature = [lon_r, lat_r, edge_tuple, scale, collection]
+    
+    # Use MD5 to generate a short, filesystem-friendly filename
+    raw = json.dumps(signature).encode("utf-8")
+    digest = hashlib.md5(raw).hexdigest()
     return _CACHE_DIR / f"{digest}.parquet"

@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
-from typing import Any, Final, List, Set, TypeAlias
+from typing import Any, Final, List, Set
 
 import ee
 import pandas as pd
 from pydantic import BaseModel, field_validator, model_validator
-from pyproj import CRS, Transformer
-from typing_extensions import TypedDict
+from pyproj import CRS
+from cubexpress.utils import rt2lonlat
 
-# Type definitions
-NumberType: TypeAlias = int | float
-
-# Constants for required keys in the geotransform
+# Constants for geotransform validation
 REQUIRED_KEYS: Final[Set[str]] = {
     "scaleX",
     "shearX",
@@ -22,198 +19,112 @@ REQUIRED_KEYS: Final[Set[str]] = {
     "translateY",
 }
 
-
-def get_transformer(source_crs_wkt: str) -> Transformer:
-    """Get cached transformer from source CRS to WGS84 (EPSG:4326)"""
-    target_crs = CRS.from_epsg(4326)
-    return Transformer.from_crs(
-        CRS.from_wkt(source_crs_wkt),
-        target_crs,
-        always_xy=True,  # Ensures consistent x,y order
-    )
-
-
-def rt2lonlat(raster: "RasterTransform") -> tuple[float, float]:
-    """
-    Calculate the geographic centroid in WGS84 with optimized performance.
-
-    Args:
-        raster: RasterTransform instance with geospatial metadata
-
-    Returns:
-        Tuple of (longitude, latitude) in WGS84 coordinates
-    """
-    # Calculate pixel coordinates of raster center
-    col_center = (raster.width - 1) / 2.0
-    row_center = (raster.height - 1) / 2.0
-
-    # Extract geotransform parameters as local variables for faster access
-    gt = raster.geotransform
-    tx = gt["translateX"]
-    sx = gt["scaleX"]
-    shx = gt["shearX"]
-    ty = gt["translateY"]
-    shy = gt["shearY"]
-    sy = gt["scaleY"]
-
-    # Apply affine transformation
-    x = tx + sx * col_center + shx * row_center
-    y = ty + shy * col_center + sy * row_center
-
-    # Check if transformation is needed
-    source_crs = CRS.from_user_input(raster.crs)
-    target_crs = CRS.from_epsg(4326)
-
-    if source_crs == target_crs:
-        return (x, y)
-
-    # Perform the transformation
-    transformer = get_transformer(source_crs.to_wkt())
-    lon, lat = transformer.transform(x, y)
-
-    return lon, lat, x, y
-
-
-class GeotransformDict(TypedDict):
-    """
-    Type definition for a geotransform dictionary containing spatial transformation parameters.
-
-    Attributes:
-        scaleX (NumberType): The scaling factor in the X direction.
-        shearX (NumberType): The shear factor in the X direction.
-        translateX (NumberType): The translation in the X direction.
-        scaleY (NumberType): The scaling factor in the Y direction.
-        shearY (NumberType): The shear factor in the Y direction.
-        translateY (NumberType): The translation in the Y direction.
-    """
-
-    scaleX: NumberType
-    shearX: NumberType
-    translateX: NumberType
-    scaleY: NumberType
-    shearY: NumberType
-    translateY: NumberType
-
-
 class RasterTransform(BaseModel):
     """
-    Represents a single geospatial metadata entry with CRS and transformation information.
+    Geospatial metadata with CRS and affine transformation.
+
+    The geotransform dictionary must contain these keys:
+        - scaleX: X-axis pixel size (meters per pixel)
+        - shearX: X-axis rotation/shear
+        - translateX: X coordinate of upper-left corner
+        - scaleY: Y-axis pixel size (typically negative)
+        - shearY: Y-axis rotation/shear  
+        - translateY: Y coordinate of upper-left corner
 
     Attributes:
-        id (str): The unique identifier for the raster metadata.
-        crs (str): The Coordinate Reference System string (EPSG code or WKT).
-        geotransform (GeotransformDict): A dictionary containing spatial transformation parameters.
-        width (int): Raster width in pixels.
-        height (int): Raster height in pixels.
+        crs: Coordinate Reference System (EPSG code or WKT)
+        geotransform: Affine transformation parameters
+        width: Raster width in pixels
+        height: Raster height in pixels
 
     Example:
-        >>> metadata = RasterTransform(
-        ...     id="image1",
-        ...     crs="EPSG:4326",
+        >>> rt = RasterTransform(
+        ...     crs="EPSG:32618",
         ...     geotransform={
-        ...         'scaleX': 1.0, 'shearX': 0, 'translateX': 100.0,
-        ...         'scaleY': 1.0, 'shearY': 0, 'translateY': 200.0
+        ...         'scaleX': 10, 'shearX': 0, 'translateX': 500000,
+        ...         'scaleY': -10, 'shearY': 0, 'translateY': 4500000
         ...     },
-        ...     width=1000,
-        ...     height=1000
+        ...     width=1024,
+        ...     height=1024
         ... )
-        RasterTransform(crs='EPSG:4326', width=1000, height=1000)
     """
 
     crs: str
-    geotransform: GeotransformDict
+    geotransform: dict[str, int | float]
     width: int
     height: int
 
     @model_validator(mode="before")
-    def validate_geotransform(cls, values):
-        """
-        Validates the geotransform dictionary to ensure it has the required keys
-        and that all values are numeric and non-zero where applicable.
-
-        Args:
-            values (dict): The input values being validated.
-
-        Returns:
-            dict: The validated values.
-
-        Raises:
-            ValueError: If validation fails for missing keys, invalid types, or zero scale values.
-        """
+    @classmethod
+    def validate_geotransform(cls, values: dict) -> dict:
+        """Validate geotransform structure and values."""
         geotransform = values.get("geotransform")
 
+        # Validate type
         if not isinstance(geotransform, dict):
             raise ValueError(
-                f"Expected geotransform to be a dictionary, got {type(geotransform)}"
+                f"geotransform must be dict, got {type(geotransform)}"
             )
+        
+        # Validate all keys are strings
+        for key in geotransform.keys():
+            if not isinstance(key, str):
+                raise ValueError(
+                    f"geotransform keys must be strings, got key {key!r} of type {type(key).__name__}"
+                )
 
-        missing_keys = REQUIRED_KEYS - set(geotransform.keys())
-        if missing_keys:
-            raise ValueError(f"Missing required keys: {missing_keys}")
+        # Validate required keys
+        missing = REQUIRED_KEYS - set(geotransform.keys())
+        if missing:
+            raise ValueError(f"Missing required keys: {missing}")
 
-        extra_keys = set(geotransform.keys()) - REQUIRED_KEYS
-        if extra_keys:
-            raise ValueError(f"Unexpected keys found: {extra_keys}")
+        # Validate unexpected keys
+        extra = set(geotransform.keys()) - REQUIRED_KEYS
+        if extra:
+            raise ValueError(f"Unexpected keys: {extra}")
 
+        # Validate numeric values
         for key in REQUIRED_KEYS:
-            if not isinstance(geotransform[key], (int, float)):
-                raise ValueError(f"Value for '{key}' must be numeric (int or float)")
+            val = geotransform[key]
+            if not isinstance(val, (int, float)):
+                raise ValueError(
+                    f"'{key}' must be numeric, got {type(val)}"
+                )
 
-        if not (geotransform["scaleX"] and geotransform["scaleY"]):
-            raise ValueError("Scale values cannot be zero")
+        # Scale values cannot be zero
+        if geotransform["scaleX"] == 0 or geotransform["scaleY"] == 0:
+            raise ValueError("Scale values (scaleX, scaleY) cannot be zero")
 
         return values
 
     @field_validator("width", "height")
     @classmethod
-    def validate_positive(cls, value: int, field) -> int:
-        """
-        Validates that width and height are positive integers.
-
-        Args:
-            value (int): The value of width or height to validate.
-            field: The field being validated (width or height).
-
-        Returns:
-            int: The validated value.
-
-        Raises:
-            ValueError: If the value is not positive.
-        """
+    def validate_positive(cls, value: int) -> int:
+        """Validate positive dimensions."""
         if value <= 0:
-            raise ValueError(
-                f"{field.field_name} must be positive and greater than zero, but got {value}"
-            )
+            raise ValueError(f"Dimensions must be positive, got {value}")
         return value
 
     def __str__(self) -> str:
-        """
-        Provides a string representation of the RasterTransform instance with a table
-        format for the geotransform parameters.
-
-        Returns:
-            str: A formatted string showing the raster metadata and geotransform.
-        """
-        geotransform_data = {
-            "Parameter": [
-                "scaleX",
-                "shearX",
-                "translateX",
-                "scaleY",
-                "shearY",
-                "translateY",
+        """Human-readable representation."""
+        data = {
+            "Property": [
+                "CRS", "Width", "Height",
+                "scaleX", "shearX", "translateX",
+                "scaleY", "shearY", "translateY"
             ],
             "Value": [
+                self.crs, self.width, self.height,
                 self.geotransform["scaleX"],
                 self.geotransform["shearX"],
                 self.geotransform["translateX"],
                 self.geotransform["scaleY"],
                 self.geotransform["shearY"],
-                self.geotransform["translateY"],
-            ],
+                self.geotransform["translateY"]
+            ]
         }
-        geotransform_df = pd.DataFrame(geotransform_data)
-        return f"RasterTransform(crs={self.crs}, width={self.width}, height={self.height})\n\nGeotransform:\n{geotransform_df}"
+        df = pd.DataFrame(data)
+        return f"RasterTransform\n{'-' * 30}\n{df.to_string(index=False)}"
 
 
 class Request(BaseModel):
@@ -255,29 +166,20 @@ class RequestSet(BaseModel):
     _dataframe: pd.DataFrame | None = None
 
 
-
     def create_manifests(self) -> pd.DataFrame:
         """
         Exports the raster metadata to a pandas DataFrame.
         Returns:
             pd.DataFrame: A DataFrame containing the metadata for all entries.
         """
-        # Use ProcessPoolExecutor for CPU-bound tasks to convert raster transforms to lon/lat
-        with ProcessPoolExecutor(max_workers=None) as executor:
-            # Submit all tasks to the executor
-            futures = [
-                executor.submit(rt2lonlat, rt.raster_transform)
-                for rt in self.requestset
-            ]
-
-            # Collect results as they complete
-            points = [future.result() for future in futures]
-            lon, lat, x, y = zip(*points)
+        # Calculate lon/lat for each request
+        points = [rt2lonlat(rt.raster_transform) for rt in self.requestset]
+        lon, lat, x, y = zip(*points)
 
         return pd.DataFrame(
             [
                 {
-                    "id": meta.id, # add clud
+                    "id": meta.id,
                     "lon": lon[index],
                     "lat": lat[index],
                     "x": x[index],
@@ -309,7 +211,6 @@ class RequestSet(BaseModel):
         )
 
 
-
     def _validate_dataframe_schema(self) -> None:
         """
         Checks that the `_dataframe` contains the required columns and that each column
@@ -320,10 +221,10 @@ class RequestSet(BaseModel):
         # A) Required columns and expected data types
         required_columns = {
             "id": str,
-            "lon": float,
-            "lat": float,
-            "x": float,
-            "y": float,
+            "lon": (float, type(None)),
+            "lat": (float, type(None)),
+            "x": (float, type(None)),
+            "y": (float, type(None)),
             "crs": str,
             "width": int,
             "height": int,

@@ -1,3 +1,4 @@
+dist/
 download/
 docs/source
 output/
@@ -5,8 +6,11 @@ demo/
 demo2.py
 borrador/
 images_s2/
+demo_check.py
 table/
 raw/
+demo.py
+data/
 s2_download/
 s2_table/
 table/
@@ -16,7 +20,9 @@ s2_l2a_gee_geom_download.csv
 s2_l2a_gee.csv
 try.py
 satcube.py
-
+folder_m/
+table/
+try_download_mt.py
 # From https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
 
 # Byte-compiled / optimized / DLL files
@@ -47,7 +53,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+data/
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -186,3 +192,4 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+marta/2020_pp.tif

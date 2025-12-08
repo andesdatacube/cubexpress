@@ -154,3 +154,38 @@ def lonlat2rt(
     return RasterTransform(
         crs=crs, geotransform=geotransform, width=width, height=height
     )
+    
+def rt2lonlat(raster) -> tuple[float, float, float, float]:
+    """
+    Calculate geographic centroid from raster transform.
+    
+    Args:
+        raster: Object with .crs, .geotransform, .width, .height
+        
+    Returns:
+        tuple[float, float, float, float]: (lon, lat, x, y)
+    """
+    # Calculate pixel coordinates of raster center
+    col_center = raster.width / 2.0
+    row_center = raster.height / 2.0
+
+    # Extract geotransform parameters
+    gt = raster.geotransform
+    tx, sx, shx = gt["translateX"], gt["scaleX"], gt["shearX"]
+    ty, shy, sy = gt["translateY"], gt["shearY"], gt["scaleY"]
+
+    # Apply affine transformation to get projected center coordinates
+    x = tx + sx * col_center + shx * row_center
+    y = ty + shy * col_center + sy * row_center
+
+    # Transform to WGS84
+    source_crs = CRS.from_user_input(raster.crs)
+    target_crs = CRS.from_epsg(4326)
+
+    if source_crs == target_crs:
+        return (x, y, x, y)
+
+    transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+    lon, lat = transformer.transform(x, y)
+
+    return lon, lat, x, y

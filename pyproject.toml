@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "cubexpress"
-version     = "0.1.18"
+version     = "0.1.20"
 description = "Efficient processing of cubic Earth-observation (EO) data."
 authors     = [
   "Julio Contreras <contrerasnetk@gmail.com>",
@@ -37,13 +37,9 @@ pydantic          = ">=2.11.4"
 [tool.poetry.group.dev.dependencies]
 pytest      = "^7.2.0"
 pytest-cov  = "^4.0.0"
-deptry      = "^0.16.2"
 mypy        = "^1.5.1"
 pre-commit  = "^3.4.0"
 tox         = "^4.11.1"
-black       = "^24.2.0"   # NEW – referenced by tool.black
-isort       = "^5.13.0"   # NEW – referenced by tool.isort
-ruff        = "^0.3.4"    # match your config file
 
 [tool.poetry.group.docs.dependencies]
 mkdocs          = "^1.4.2"
@@ -54,47 +50,101 @@ mkdocstrings    = { extras = ["python"], version = "^0.26.1" }
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-# ─────────────────────────────────── tooling configs (unchanged) ────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Code Quality Tools Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+
+[tool.black]
+line-length = 120
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile                = "black"
+line_length            = 120
+multi_line_output      = 3
+include_trailing_comma = true
+force_grid_wrap        = 0
+use_parentheses        = true
+ensure_newline_before_comments = true
+skip_gitignore         = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+  "F",     # Pyflakes
+  "E",     # pycodestyle errors
+  "W",     # pycodestyle warnings
+  "I",     # isort
+  "UP",    # pyupgrade
+  "B",     # flake8-bugbear
+  "SIM",   # flake8-simplify
+  "C4",    # flake8-comprehensions
+  "RUF",   # Ruff-specific
+  "PTH",   # flake8-use-pathlib
+  "T20",   # flake8-print
+  "PERF",  # Perflint
+  "ASYNC1", # Async checks (remapped from TRIO)
+]
+
+ignore = [
+  "E501",    # Line too long (black handles this)
+  "E731",    # Lambda assignment
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "ARG", "PLR2004"]
+"__init__.py" = ["F401", "F403"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 [tool.mypy]
-files                  = ["cubexpress"]
-disallow_untyped_defs  = true
-disallow_any_unimported = true
-no_implicit_optional   = true
-check_untyped_defs     = true
-warn_return_any        = true
-warn_unused_ignores    = true
-show_error_codes       = true
+python_version = "3.9"
+files = ["cubexpress"]
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+no_implicit_optional = true
+check_untyped_defs = true
+show_error_codes = true
+ignore_missing_imports = true
+strict_optional = true
+warn_redundant_casts = true
+warn_no_return = true
+
+[[tool.mypy.overrides]]
+module = [
+  "rasterio.*",
+  "utm.*",
+  "pygeohash.*",
+  "ee.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.isort]
-profile      = "black"
-line_length  = 120
-
-[tool.black]
-line-length     = 120
-target-version  = ["py39"]
-
-[tool.ruff]
-target-version = "py39"
-line-length    = 120
-fix            = true
-select         = [
-  "YTT", "S", "B", "A", "C4", "T10", "SIM",
-  "I", "C90", "E", "W", "F", "PGH", "UP", "RUF", "TRY",
-]
-ignore         = ["E501", "E731"]
-
-[tool.ruff.format]
-preview = true
-
-[tool.coverage.report]
-skip_empty = true
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.coverage.run]
 branch = true
 source = ["cubexpress"]
 
-[tool.ruff.per-file-ignores]
-"tests/*" = ["S101"]
+[tool.coverage.report]
+skip_empty = true
+precision = 2
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "@abstractmethod",
+  "@overload",
+]

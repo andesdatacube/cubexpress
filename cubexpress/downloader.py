@@ -1,97 +1,115 @@
 from __future__ import annotations
 
 import json
-import logging
-import os
-import ee
 import pathlib
 import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any, Iterator
+
+import ee
+
 from cubexpress.geospatial import merge_tifs
 
-# Suppress RasterIO/GDAL logging
-os.environ['CPL_LOG_ERRORS'] = 'OFF'
-logging.getLogger('rasterio._env').setLevel(logging.ERROR)
+
+@contextmanager
+def temp_workspace(prefix: str = "cubexpress_") -> Iterator[pathlib.Path]:
+    """
+    Create a temporary directory with automatic cleanup.
+    
+    Args:
+        prefix: Prefix for the temporary directory name
+        
+    Yields:
+        Path to temporary directory
+    """
+    tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix=prefix))
+    try:
+        yield tmp_dir
+    finally:
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 def download_manifest(
-    ulist: Dict[str, Any], 
+    ulist: dict[str, Any], 
     full_outname: pathlib.Path
 ) -> None:
     """
-    Downloads data from Earth Engine based on a manifest dictionary.
+    Download data from Earth Engine based on a manifest dictionary.
 
-    Handles both direct asset IDs and serialized EE expressions. The resulting
-    bytes are written directly to the specified output path.
+    Handles both direct asset IDs and serialized EE expressions.
 
     Args:
-        ulist (Dict[str, Any]): The export manifest containing 'assetId' or 
-            'expression' and format parameters.
-        full_outname (pathlib.Path): Destination path for the downloaded file.
+        ulist: Export manifest containing 'assetId' or 'expression'
+        full_outname: Destination path for the downloaded file
 
     Raises:
-        ValueError: If the manifest lacks both 'assetId' and 'expression'.
+        ValueError: If manifest is invalid
+        ee.ee_exception.EEException: If Earth Engine request fails
     """
     if "assetId" in ulist:
         images_bytes = ee.data.getPixels(ulist)
     elif "expression" in ulist:
-        # Decode serialized expression before request
         ee_image = ee.deserializer.decode(json.loads(ulist["expression"]))
         ulist_deep = deepcopy(ulist)
         ulist_deep["expression"] = ee_image
         images_bytes = ee.data.computePixels(ulist_deep)
     else:
-        raise ValueError("Manifest does not contain 'assetId' or 'expression'")
+        raise ValueError("Manifest must contain 'assetId' or 'expression'")
     
-    with open(full_outname, "wb") as src:
-        src.write(images_bytes)
-        
+    full_outname.parent.mkdir(parents=True, exist_ok=True)
+    with open(full_outname, "wb") as f:
+        f.write(images_bytes)
+
+
 def download_manifests(
-    manifests: list[Dict[str, Any]],
+    manifests: list[dict[str, Any]],
     full_outname: pathlib.Path,
     max_workers: int = 1,
 ) -> None:
     """
-    Downloads multiple manifests concurrently and merges them into one file.
+    Download multiple manifests concurrently and merge into one file.
 
-    Creates a temporary directory to store individual tiles, downloads them
-    in parallel, merges them using `merge_tifs`, and cleans up temporary files.
+    Uses a temporary workspace that is automatically cleaned up.
 
     Args:
-        manifests (list[Dict[str, Any]]): List of Earth Engine manifests.
-        full_outname (pathlib.Path): Final destination path for the merged TIFF.
-        max_workers (int, optional): Number of parallel download threads. 
-            Defaults to 1.
+        manifests: List of Earth Engine manifests
+        full_outname: Final destination path for merged TIFF
+        max_workers: Number of parallel download threads
 
     Raises:
-        ValueError: If the temporary directory was not created or processed.
+        ee.ee_exception.EEException: If any download fails
+        ValueError: If merge fails
     """
-    # Create temporary directory for tile storage
-    tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="cubexpress_"))
-    full_outname_temp = tmp_dir / full_outname.stem
-    full_outname_temp.mkdir(parents=True, exist_ok=True)
+    with temp_workspace() as tmp_dir:
+        tile_dir = tmp_dir / full_outname.stem
+        tile_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download tiles in parallel
-    with ThreadPoolExecutor(max_workers=max_workers) as exe:
-        futures = {
-            exe.submit(
-                download_manifest, 
-                ulist=umanifest, 
-                full_outname=full_outname_temp / f"{index:06d}.tif" 
-            ): umanifest for index, umanifest in enumerate(manifests)               
-        }
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as exc:
-                print(f"Error in one of the downloads: {exc}")
-    
-    # Merge tiles and cleanup
-    if full_outname_temp.exists():
-        input_files = sorted(full_outname_temp.glob("*.tif"))
+        # Download tiles in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    download_manifest, 
+                    ulist=manifest, 
+                    full_outname=tile_dir / f"{idx:06d}.tif"
+                ): idx 
+                for idx, manifest in enumerate(manifests)
+            }
+            
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as exc:
+                    idx = futures[future]
+                    print(f"Error downloading tile {idx}: {exc}")
+                    raise
+        
+        # Merge tiles
+        input_files = sorted(tile_dir.glob("*.tif"))
+        if not input_files:
+            raise ValueError(f"No tiles downloaded in {tile_dir}")
+        
         merge_tifs(input_files, full_outname)
-        shutil.rmtree(full_outname_temp) 
-    else:
-        raise ValueError(f"Error in {full_outname}")

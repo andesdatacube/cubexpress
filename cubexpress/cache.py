@@ -1,14 +1,14 @@
+"""Caching utilities for Earth Engine query results."""
+
+from __future__ import annotations
+
 import hashlib
 import json
-import os
 import pathlib
-from typing import Final
 
-# Directory for storing cached metadata files (configurable via env var)
-_CACHE_DIR: Final[pathlib.Path] = pathlib.Path(
-    os.getenv("CUBEXPRESS_CACHE", "~/.cubexpress_cache")
-).expanduser()
-_CACHE_DIR.mkdir(exist_ok=True)
+from cubexpress.config import CACHE_DIR
+
+CACHE_DIR.mkdir(exist_ok=True, parents=True)
 
 
 def _cache_key(
@@ -19,34 +19,58 @@ def _cache_key(
     collection: str,
 ) -> pathlib.Path:
     """
-    Generates a deterministic file path for caching query results.
+    Generate a deterministic cache file path for query parameters.
 
-    Hashes the query parameters to create a unique filename. Coordinates
-    are rounded to 4 decimals to ensure cache hits on equivalent locations.
+    Coordinates are rounded to 4 decimal places (~11m precision) to
+    ensure cache hits for equivalent locations.
 
     Args:
-        lon (float): Longitude of the center point.
-        lat (float): Latitude of the center point.
-        edge_size (int | Tuple[int, int]): Size of the ROI in pixels.
-        scale (int): Pixel resolution in meters.
-        collection (str): Earth Engine collection ID.
+        lon: Longitude of center point
+        lat: Latitude of center point
+        edge_size: ROI size in pixels
+        scale: Pixel resolution in meters
+        collection: Earth Engine collection ID
 
     Returns:
-        pathlib.Path: Full path to the hashed .parquet cache file.
+        Path to hashed .parquet cache file
     """
-    # Round coordinates to ~11m precision to group nearby requests
-    lon_r, lat_r = round(lon, 4), round(lat, 4)
+    lon_r = round(lon, 4)
+    lat_r = round(lat, 4)
     
-    # Normalize edge_size to tuple for consistent hashing
-    if isinstance(edge_size, int):
-        edge_tuple = (edge_size, edge_size)
-    else:
-        edge_tuple = edge_size
+    edge_tuple = (
+        (edge_size, edge_size) if isinstance(edge_size, int) 
+        else tuple(edge_size)
+    )
     
-    # Create a unique signature for this request configuration
     signature = [lon_r, lat_r, edge_tuple, scale, collection]
     
-    # Use MD5 to generate a short, filesystem-friendly filename
-    raw = json.dumps(signature).encode("utf-8")
+    raw = json.dumps(signature, sort_keys=True).encode("utf-8")
     digest = hashlib.md5(raw).hexdigest()
-    return _CACHE_DIR / f"{digest}.parquet"
+    
+    return CACHE_DIR / f"{digest}.parquet"
+
+
+def clear_cache() -> int:
+    """
+    Remove all cached query results.
+    
+    Returns:
+        Number of files deleted
+    """
+    count = 0
+    for cache_file in CACHE_DIR.glob("*.parquet"):
+        cache_file.unlink()
+        count += 1
+    return count
+
+
+def get_cache_size() -> tuple[int, int]:
+    """
+    Calculate total cache size.
+    
+    Returns:
+        Tuple of (file_count, total_bytes)
+    """
+    files = list(CACHE_DIR.glob("*.parquet"))
+    total_bytes = sum(f.stat().st_size for f in files)
+    return len(files), total_bytes

@@ -1,81 +1,88 @@
+"""Coordinate conversion and raster transform utilities."""
+
+from __future__ import annotations
+
 import utm
 from pyproj import CRS, Transformer
+
+from cubexpress.exceptions import ValidationError
 from cubexpress.geotyping import RasterTransform
+
 
 def parse_edge_size(edge_size: int | tuple[int, int]) -> tuple[int, int]:
     """
     Parse edge_size input into (width, height) tuple.
     
     Args:
-        edge_size: Size specification
+        edge_size: Size specification (int for square, tuple for rectangle)
         
     Returns:
-        tuple[int, int]: (width, height) in pixels
+        Tuple of (width, height) in pixels
         
     Raises:
-        ValueError: If tuple length != 2 or values <= 0
+        ValidationError: If input is invalid
     """
     if isinstance(edge_size, int):
         if edge_size <= 0:
-            raise ValueError(f"edge_size must be positive, got {edge_size}")
+            raise ValidationError(f"edge_size must be positive, got {edge_size}")
         return (edge_size, edge_size)
-    else:
-        if len(edge_size) != 2:
-            raise ValueError(f"edge_size tuple must have 2 elements, got {len(edge_size)}")
-        width, height = edge_size
-        if width <= 0 or height <= 0:
-            raise ValueError(f"edge_size values must be positive, got {edge_size}")
-        return (width, height)
+    
+    if len(edge_size) != 2:
+        raise ValidationError(
+            f"edge_size tuple must have 2 elements, got {len(edge_size)}"
+        )
+    
+    width, height = edge_size
+    if width <= 0 or height <= 0:
+        raise ValidationError(
+            f"edge_size values must be positive, got {edge_size}"
+        )
+    
+    return (width, height)
 
-def geo2utm(
-    lon: float, 
-    lat: float
-) -> tuple[float, float, str]:
+
+def geo2utm(lon: float, lat: float) -> tuple[float, float, str]:
     """
-    Converts latitude and longitude coordinates to UTM coordinates and returns the EPSG code.
-
+    Convert lat/lon to UTM coordinates and EPSG code.
+    
+    Uses the utm library for standard conversion.
+    
     Args:
-        lon (float): Longitude in decimal degrees.
-        lat (float): Latitude in decimal degrees.
+        lon: Longitude in decimal degrees
+        lat: Latitude in decimal degrees
 
     Returns:
-        tuple[float, float, str]: UTM coordinates (x, y) in meters and EPSG code as string.
+        Tuple of (x, y, epsg_code) where EPSG code is formatted as 'EPSG:XXXXX'
         
     Raises:
-        utm.OutOfRangeError: If coordinates are outside valid UTM range.
+        utm.OutOfRangeError: If coordinates are outside valid UTM range
     """
     x, y, zone, _ = utm.from_latlon(lat, lon)
     epsg_code = f"326{zone:02d}" if lat >= 0 else f"327{zone:02d}"
     return float(x), float(y), f"EPSG:{epsg_code}"
 
 
-def lonlat2rt_utm_or_ups(
-    lon: float, 
-    lat: float
-) -> tuple[float, float, str]:
+def lonlat2rt_utm_or_ups(lon: float, lat: float) -> tuple[float, float, str]:
     """
     Calculate UTM coordinates using pyproj (fallback for geo2utm).
     
-    Uses standard UTM zones for all latitudes, matching GEE behavior.
-    This method is more robust than the utm library and works globally.
-    
-    Note:
-        UTM is designed for [-80°, 84°] but works globally with 
-        acceptable distortions for small tiles.
+    This method is more robust than the utm library and works globally,
+    including near the poles. Uses standard UTM zones for all latitudes
+    to match Google Earth Engine behavior.
     
     Args:
-        lon (float): Longitude in decimal degrees.
-        lat (float): Latitude in decimal degrees.
+        lon: Longitude in decimal degrees
+        lat: Latitude in decimal degrees
         
     Returns:
-        tuple[float, float, str]: UTM coordinates (x, y) in meters and EPSG code as string.
+        Tuple of (x, y, epsg_code)
     """
     zone = int((lon + 180) // 6) + 1
     epsg_code = 32600 + zone if lat >= 0 else 32700 + zone
     crs = CRS.from_epsg(epsg_code)
     
-    to_xy = Transformer.from_crs(4326, crs, always_xy=True)
-    x, y = to_xy.transform(lon, lat)
+    transformer = Transformer.from_crs(4326, crs, always_xy=True)
+    x, y = transformer.transform(lon, lat)
     
     return float(x), float(y), f"EPSG:{epsg_code}"
 
@@ -87,47 +94,29 @@ def lonlat2rt(
     scale: int
 ) -> RasterTransform:
     """
-    Generates a ``RasterTransform`` for a given point by converting geographic (lon, lat) coordinates
-    to UTM projection and building the necessary geotransform metadata.
+    Generate a RasterTransform from geographic coordinates.
 
-    This function:
-      1. Converts the input (lon, lat) to UTM coordinates using :func:`geo2utm`.
-      2. If that fails (e.g., near poles), falls back to pyproj-based calculation.
-      3. Defines the extent of the raster in UTM meters based on the specified dimensions
-         and ``scale`` (meters per pixel).
-      4. Sets the Y-scale to be negative (``-scale``) because geospatial images typically consider 
-         the origin at the top-left corner, resulting in a downward Y axis.
+    Converts (lon, lat) to UTM projection and builds geospatial metadata
+    including affine transformation parameters. The Y-scale is negative
+    because raster images have their origin at the top-left corner.
 
     Args:
-        lon (float): Longitude in decimal degrees.
-        lat (float): Latitude in decimal degrees.
-        edge_size (int | tuple[int, int]): Size of the output raster. 
-            If int, creates a square (width=height=edge_size).
-            If tuple, specifies (width, height) in pixels.
-        scale (int): Spatial resolution in meters per pixel.
+        lon: Longitude in decimal degrees
+        lat: Latitude in decimal degrees
+        edge_size: Output raster size
+            - int: creates square (width=height=edge_size)
+            - tuple: specifies (width, height) in pixels
+        scale: Spatial resolution in meters per pixel
 
     Returns:
-        RasterTransform: A Pydantic model containing:
-         - ``crs``: The EPSG code in the form ``"EPSG:XYZ"``,
-         - ``geotransform``: A dictionary with the affine transform parameters,
-         - ``width`` and ``height``.
+        RasterTransform with CRS, geotransform, and dimensions
 
     Examples:
-        Square raster:
-        
-        >>> rt = cubexpress.lonlat2rt(
-        ...     lon=-76.0, lat=40.0,
-        ...     edge_size=512, scale=30
-        ... )
+        >>> rt = lonlat2rt(lon=-76.0, lat=40.0, edge_size=512, scale=30)
         >>> print(rt.width, rt.height)
         512 512
         
-        Rectangular raster:
-        
-        >>> rt = cubexpress.lonlat2rt(
-        ...     lon=-76.0, lat=40.0,
-        ...     edge_size=(1024, 512), scale=30
-        ... )
+        >>> rt = lonlat2rt(lon=-76.0, lat=40.0, edge_size=(1024, 512), scale=30)
         >>> print(rt.width, rt.height)
         1024 512
     """
@@ -136,21 +125,23 @@ def lonlat2rt(
     except Exception:
         x, y, crs = lonlat2rt_utm_or_ups(lon, lat)
     
-    # Parse edge_size
     width, height = parse_edge_size(edge_size)
-        
-    half_width = (width * scale) / 2
-    half_height = (height * scale) / 2
+    
+    half_width_m = (width * scale) / 2
+    half_height_m = (height * scale) / 2
 
-    geotransform = dict(
-        scaleX=scale,
-        shearX=0,
-        translateX=x - half_width,
-        scaleY=-scale,
-        shearY=0,
-        translateY=y + half_height,
-    )
+    geotransform = {
+        "scaleX": scale,
+        "shearX": 0,
+        "translateX": x - half_width_m,
+        "scaleY": -scale,
+        "shearY": 0,
+        "translateY": y + half_height_m,
+    }
 
     return RasterTransform(
-        crs=crs, geotransform=geotransform, width=width, height=height
+        crs=crs,
+        geotransform=geotransform,
+        width=width,
+        height=height
     )

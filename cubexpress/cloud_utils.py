@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import datetime as dt
-import sys
 import time
+import warnings
+
 import ee
 import pandas as pd
+
 from cubexpress.cache import _cache_key
-import datetime as dt
 from cubexpress.geospatial import _square_roi
-import warnings
+
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 
@@ -241,7 +242,9 @@ def s2_table(
         elapsed = time.time() - t0
         n_images = len(df_full)
         date_range = f"{start} to {end}"
-        print(f"\r✅ Retrieved {n_images} images from {date_range} ({elapsed:.2f}s)")
+        actual_start = df_full['date'].min()
+        actual_end = df_full['date'].max()
+        print(f"\r✅ Retrieved {n_images} images from {actual_start} to {actual_end} ({elapsed:.2f}s)")
 
     # Save cache
     if cache:

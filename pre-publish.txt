@@ -1,17 +1,14 @@
 # pip install black isort ruff mypy
-# # Formatea código
-# black cubexpress/
-
-# # Ordena imports
-# isort cubexpress/
-
-# # Lint
-# ruff check --fix cubexpress/
-
-# # Publica
-# poetry version patch
-# poetry build
-# poetry publish
+# Formatea código
+black cubexpress/
+# Ordena imports
+isort cubexpress/
+# Lint
+ruff check --fix cubexpress/
+# Publica
+poetry version patch
+poetry build
+poetry publish
 
 
 # # Commit los cambios de versión

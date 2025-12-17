@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "cubexpress"
-version     = "0.1.21"
+version     = "0.1.22"
 description = "Efficient processing of cubic Earth-observation (EO) data."
 authors     = [
   "Julio Contreras <contrerasnetk@gmail.com>",
@@ -20,6 +20,10 @@ classifiers  = [
   "Topic :: Scientific/Engineering :: GIS",
 ]
 packages = [{ include = "cubexpress" }]
+
+include = [
+    "cubexpress/*.py"
+]
 
 [tool.poetry.dependencies]
 python            = ">=3.9"

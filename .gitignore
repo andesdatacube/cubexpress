@@ -50,6 +50,7 @@ var/
 wheels/
 share/python-wheels/
 *.egg-info/
+data_to_send/
 .installed.cfg
 *.egg
 MANIFEST

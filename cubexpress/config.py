@@ -7,7 +7,6 @@ import pathlib
 from dataclasses import dataclass
 from typing import Final
 
-
 # Earth Engine Collections
 S2_COLLECTION: Final[str] = "COPERNICUS/S2_HARMONIZED"
 S2_CLOUD_COLLECTION: Final[str] = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"

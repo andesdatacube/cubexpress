@@ -1,23 +1,16 @@
 # pip install black isort ruff mypy
-# Formatea código
-black cubexpress/
-# Ordena imports
-isort cubexpress/
-# Lint
-ruff check --fix cubexpress/
-# Publica
-poetry version patch
-poetry build
-poetry publish
+# Quick publish (sin script)
+isort cubexpress/ 
+black cubexpress/ 
+ruff check --fix cubexpress/ 
+poetry version patch 
+git add -A 
+git commit -m "bump: version $(poetry version -s)" 
+rm -rf dist build *.egg-info 
+poetry build 
+poetry publish 
 
 
-# # Commit los cambios de versión
-# git add pyproject.toml
-# git commit -m "chore: bump version to 0.1.20"
-
-# # Tag la release
-# git tag v0.1.20
-
-# # Push todo
-# git push origin main
-# git push origin v0.1.20
+git tag "v$(poetry version -s)" 
+git push --tags 
+git push

@@ -10,7 +10,8 @@ Main components:
 
 from __future__ import annotations
 
-from cubexpress.cloud_utils import s2_table
+# from cubexpress.mss_table import mss_table
+from cubexpress.cloud_utils import mss_table, s2_table, sensor_table
 from cubexpress.conversion import geo2utm, lonlat2rt
 from cubexpress.cube import get_cube
 from cubexpress.geotyping import RasterTransform, Request, RequestSet
@@ -25,6 +26,8 @@ __all__ = [
     "s2_table",
     "table_to_requestset",
     "get_cube",
+    "mss_table",
+    "sensor_table"
 ]
 
 try:

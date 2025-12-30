@@ -152,7 +152,7 @@ def merge_tifs(
     input_files: list[pathlib.Path],
     output_path: pathlib.Path,
     *,
-    nodata: int = 65535,
+    nodata: int | float | None = None,
     gdal_threads: int = 8
 ) -> None:
     """
@@ -161,7 +161,7 @@ def merge_tifs(
     Args:
         input_files: Paths to GeoTIFF tiles
         output_path: Destination path for merged file
-        nodata: NoData value for the mosaic
+        nodata: NoData value for the mosaic. If None, inferred from source.
         gdal_threads: Number of threads for GDAL operations
 
     Raises:
@@ -180,11 +180,18 @@ def merge_tifs(
         ):
             # Open all source files
             srcs = [rio.open(fp) for fp in input_files]
-            
+
+            if nodata is None:
+                if srcs[0].nodata is not None:
+                    merge_nodata = srcs[0].nodata
+                else:
+                    merge_nodata = 0
+            else:
+                merge_nodata = nodata
             try:
                 mosaic, out_transform = rio_merge(
                     srcs,
-                    nodata=nodata,
+                    nodata=merge_nodata,
                     resampling=Resampling.nearest
                 )
                 
@@ -193,7 +200,7 @@ def merge_tifs(
                     "transform": out_transform,
                     "height": mosaic.shape[1],
                     "width": mosaic.shape[2],
-                    "nodata": nodata
+                    "nodata": merge_nodata
                 })
                 
                 with rio.open(output_path, "w", **meta) as dst:

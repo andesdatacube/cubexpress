@@ -41,3 +41,13 @@ poetry version patch
 rm -rf dist build *.egg-info 
 poetry build 
 poetry publish 
+
+
+
+isort mlstac/ 
+black mlstac/ 
+ruff check --fix mlstac/ 
+poetry version patch 
+rm -rf dist build *.egg-info 
+poetry build 
+poetry publish 

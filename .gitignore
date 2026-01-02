@@ -52,6 +52,7 @@ share/python-wheels/
 *.egg-info/
 data_to_send/
 .installed.cfg
+gaa/
 *.egg
 MANIFEST
 *.manifest

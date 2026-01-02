@@ -91,7 +91,8 @@ def lonlat2rt(
     lon: float, 
     lat: float, 
     edge_size: int | tuple[int, int], 
-    scale: int
+    scale: int,
+    grid_reference: tuple[float, float, int] | None = None
 ) -> RasterTransform:
     """
     Generate a RasterTransform from geographic coordinates.
@@ -107,18 +108,20 @@ def lonlat2rt(
             - int: creates square (width=height=edge_size)
             - tuple: specifies (width, height) in pixels
         scale: Spatial resolution in meters per pixel
+        grid_reference: Tuple of (translate_x, translate_y, native_scale) from a
+            reference image to align the output grid. If provided, the top-left 
+            corner will be snapped to the same grid as the reference image.
 
     Returns:
         RasterTransform with CRS, geotransform, and dimensions
 
     Examples:
+        >>> # Without alignment - centered exactly on point
         >>> rt = lonlat2rt(lon=-76.0, lat=40.0, edge_size=512, scale=30)
-        >>> print(rt.width, rt.height)
-        512 512
         
-        >>> rt = lonlat2rt(lon=-76.0, lat=40.0, edge_size=(1024, 512), scale=30)
-        >>> print(rt.width, rt.height)
-        1024 512
+        >>> # With grid alignment from reference image
+        >>> rt = lonlat2rt(lon=-76.0, lat=40.0, edge_size=512, scale=30,
+        ...                grid_reference=(502530.0, -1959510.0, 60))
     """
     try:
         x, y, crs = geo2utm(lon, lat)
@@ -130,13 +133,25 @@ def lonlat2rt(
     half_width_m = (width * scale) / 2
     half_height_m = (height * scale) / 2
 
+    # Calculate top-left corner (before alignment)
+    ul_x = x - half_width_m
+    ul_y = y + half_height_m
+
+    # Align to reference grid if provided
+    if grid_reference is not None:
+        ref_x, ref_y, _ = grid_reference
+        # Snap to the same grid as reference image
+        # Formula: find nearest grid line that matches reference origin
+        ul_x = ref_x + round((ul_x - ref_x) / scale) * scale
+        ul_y = ref_y + round((ul_y - ref_y) / scale) * scale
+
     geotransform = {
         "scaleX": scale,
         "shearX": 0,
-        "translateX": x - half_width_m,
+        "translateX": ul_x,
         "scaleY": -scale,
         "shearY": 0,
-        "translateY": y + half_height_m,
+        "translateY": ul_y,
     }
 
     return RasterTransform(

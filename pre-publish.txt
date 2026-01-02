@@ -14,3 +14,30 @@ poetry publish
 git tag "v$(poetry version -s)" 
 git push --tags 
 git push
+
+
+# pip install black isort ruff mypy
+# Quick publish (sin script)
+isort satcube/ 
+black satcube/ 
+ruff check --fix satcube/ 
+poetry version patch 
+rm -rf dist build *.egg-info 
+poetry build 
+poetry publish 
+
+git add -A 
+git commit -m "bump: version $(poetry version -s)" 
+git tag "v$(poetry version -s)" 
+git push --tags 
+git push
+
+
+
+isort satalign/ 
+black satalign/ 
+ruff check --fix satalign/ 
+poetry version patch 
+rm -rf dist build *.egg-info 
+poetry build 
+poetry publish 

@@ -16,61 +16,41 @@ def _apply_toa_if_needed(
     toa: bool,
     sensor_prefix: str = ""
 ) -> str | ee.Image:
+    """Apply TOA calibration to MSS images ONLY if requested.
+
+    TM, ETM+, and OLI/TIRS have dedicated _TOA collections that are already
+    calibrated, so they should NOT use this function.
     """
-    Apply TOA calibration to MSS images ONLY if requested.
-    
-    TM, ETM+, and OLI/TIRS have dedicated _TOA collections that are already TOA-calibrated,
-    so they should NOT use this function. Only MSS needs ee.Algorithms.Landsat.TOA().
-    
-    Args:
-        image_source: EE Image object or asset ID string
-        toa: If True, applies Landsat TOA calibration (for MSS only)
-        sensor_prefix: Sensor identifier to check if TOA conversion is needed
-        
-    Returns:
-        Original image or TOA-calibrated image (MSS only)
-    """
-    # Only apply TOA conversion for MSS sensors
     if not toa or not sensor_prefix.startswith("MSS"):
         return image_source
-    
-    # Convert string asset ID to ee.Image if needed
+
     if isinstance(image_source, str):
         image_source = ee.Image(image_source)
-    
-    # Apply TOA calibration for MSS only
+
     return ee.Algorithms.Landsat.TOA(image_source)
 
 
 def _get_tile_suffix(full_id: str) -> str:
-    """
-    Extract tile identifier from full Earth Engine asset ID.
-    
-    Args:
-        full_id: Full EE asset path
-        
-    Returns:
-        Tile suffix (e.g., '33VUC' from Sentinel-2 ID)
-    """
+    """Extract tile identifier from full Earth Engine asset ID."""
     filename = full_id.split("/")[-1]
     suffix = filename.split("_")[-1]
-    # Heuristic: S2 tiles start with T
+    # S2 tiles start with T
     if suffix.startswith("T") and len(suffix) == 6:
         return suffix[1:]
     return suffix
 
 
 def table_to_requestset(
-    table: pd.DataFrame, 
+    table: pd.DataFrame,
     mosaic: bool = True
 ) -> RequestSet:
-    """
-    Converts a cloud score table into Earth Engine requests.
-    
+    """Converts a cloud score table into Earth Engine requests.
+
     If table.attrs['toa'] is True, applies TOA calibration to Landsat images.
+    If table.attrs['grid_reference'] is set, aligns output to that grid.
 
     Args:
-        table: DataFrame with metadata (columns: 'id', 'date', cloud metric)
+        table: DataFrame with metadata (columns: 'id', 'date', 'cloud_cover')
             and required .attrs metadata (lon, lat, collection, bands, toa).
             Note: The 'id' column must contain the full Earth Engine asset ID.
         mosaic: If True, composites images from the same day into a single
@@ -86,37 +66,41 @@ def table_to_requestset(
         raise ValidationError(
             "Input table is empty. Check dates, location, or cloud criteria."
         )
-    
+
     required_attrs = {"lon", "lat", "edge_size", "scale", "collection", "bands"}
     missing_attrs = required_attrs - set(table.attrs.keys())
     if missing_attrs:
         raise ValidationError(f"Missing required attributes: {missing_attrs}")
-    
+
     df = table.copy()
     meta = df.attrs
-    
+
+    # Get optional attributes with defaults
+    grid_reference = meta.get("grid_reference", None)
+
     rt = lonlat2rt(
         lon=meta["lon"],
         lat=meta["lat"],
         edge_size=meta["edge_size"],
         scale=meta["scale"],
+        grid_reference=grid_reference
     )
-    
+
     centre_hash = pgh.encode(meta["lat"], meta["lon"], precision=5)
     bands = meta["bands"]
     toa = meta.get("toa", False)
-    
-    # Identify cloud metric column dynamically
+
+    # Identify cloud metric column (prefer lowercase standard)
     metric_col = None
-    for candidate in ["cs_cdf", "CLOUD_COVER", "cloud_cover"]:
+    for candidate in ["cloud_cover", "cs_cdf", "CLOUD_COVER"]:
         if candidate in df.columns:
             metric_col = candidate
             break
-            
+
     if metric_col is None:
         metric_col = "cloud_metric_dummy"
         df[metric_col] = 0.0
-    
+
     reqs = []
 
     if mosaic:
@@ -126,9 +110,7 @@ def table_to_requestset(
                 id_list=('id', list),
                 tiles=(
                     'id',
-                    lambda ids: ','.join(
-                        sorted({_get_tile_suffix(i) for i in ids})
-                    )
+                    lambda ids: ','.join(sorted({_get_tile_suffix(i) for i in ids}))
                 ),
                 cloud_metric=(metric_col, lambda x: round(x.mean(), 2))
             )
@@ -137,7 +119,7 @@ def table_to_requestset(
         for day, row in grouped.iterrows():
             img_ids = row["id_list"]
             metric_val = row["cloud_metric"]
-            
+
             if len(img_ids) > 1:
                 req_id = f"{day}_{centre_hash}_{metric_val:.2f}"
                 image_source = ee.ImageCollection(
@@ -164,9 +146,9 @@ def table_to_requestset(
             day = row["date"]
             val = row.get(metric_col, 0)
             metric_val = round(val, 2)
-            
+
             image_source = _apply_toa_if_needed(full_id, toa)
-            
+
             reqs.append(
                 Request(
                     id=f"{day}_{tile}_{metric_val:.2f}",

@@ -1053,7 +1053,7 @@ def s2_table(
     start: str | None = None, end: str | None = None,
     scale: int | None = None, max_cscore: float | None = None,
     min_cscore: float | None = None, cache: bool = False,
-    align_to_grid: bool | str = False
+    align_to_grid: bool | str = False, extra_properties: list[str] | None = None
 ) -> pd.DataFrame:
     """Builds (and caches) a per-day cloud-table for Sentinel-2.
 
@@ -1062,7 +1062,8 @@ def s2_table(
     return _sensor_table(
         sensor="S2", lon=lon, lat=lat, edge_size=edge_size,
         start=start, end=end, scale=scale, max_cloud=max_cscore,
-        min_cloud=min_cscore, cache=cache, align_to_grid=align_to_grid
+        min_cloud=min_cscore, cache=cache, align_to_grid=align_to_grid,
+        extra_properties=extra_properties
     )
 
 

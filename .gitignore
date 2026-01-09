@@ -7,13 +7,11 @@ demo2.py
 borrador/
 images_s2/
 demo_check.py
-table/
 raw/
 demo.py
 data/
 s2_download/
 s2_table/
-table/
 df_raw.csv
 df_raw2.csv
 s2_l2a_gee_geom_download.csv
@@ -21,7 +19,6 @@ s2_l2a_gee.csv
 try.py
 satcube.py
 folder_m/
-table/
 try_download_mt.py
 # From https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
 
@@ -56,6 +53,7 @@ gaa/
 *.egg
 MANIFEST
 *.manifest
+table/
 *.spec
 pip-log.txt
 pip-delete-this-directory.txt

@@ -581,6 +581,35 @@ def _s2_cloud_table_single_range(
     other_cols = [c for c in df_raw.columns if c not in base_cols]
     df_raw = df_raw[[c for c in base_cols + other_cols if c in df_raw.columns]]
 
+    # Extract extra properties if requested
+    if extra_properties and not df_raw.empty:
+        extra_props = extra_properties
+        
+        def extract_extra(img):
+            feat_props = {'system_index': img.get('system:index')}
+            for prop in extra_props:
+                feat_props[prop.lower()] = img.get(prop)
+            return ee.Feature(None, feat_props)
+        
+        extra_fc = s2.map(extract_extra)
+        extra_data = extra_fc.getInfo()
+        
+        if extra_data.get('features'):
+            extra_records = [f['properties'] for f in extra_data['features']]
+            df_extra = pd.DataFrame(extra_records)
+            
+            # Create merge key from id
+            df_raw['_merge_key'] = df_raw['id'].apply(lambda x: x.split('/')[-1])
+            df_extra['_merge_key'] = df_extra['system_index']
+            
+            # Merge extra columns
+            extra_cols = [p.lower() for p in extra_props]
+            df_raw = df_raw.merge(
+                df_extra[['_merge_key'] + extra_cols],
+                on='_merge_key',
+                how='left'
+            ).drop(columns=['_merge_key'])
+
     return df_raw
 
 

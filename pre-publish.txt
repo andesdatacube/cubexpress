@@ -51,3 +51,13 @@ poetry version patch
 rm -rf dist build *.egg-info 
 poetry build 
 poetry publish 
+
+
+
+isort cubexpress/ 
+black cubexpress/ 
+ruff check --fix cubexpress/ 
+poetry version patch 
+rm -rf dist build *.egg-info 
+poetry build 
+poetry publish 

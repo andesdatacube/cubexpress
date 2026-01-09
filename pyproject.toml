@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "cubexpress"
-version     = "0.1.27"
+version     = "0.1.28"
 description = "Efficient processing of cubic Earth-observation (EO) data."
 authors     = [
   "Julio Contreras <contrerasnetk@gmail.com>",
@@ -42,9 +42,11 @@ tqdm              = ">=4.65.0"
 [tool.poetry.group.dev.dependencies]
 pytest      = "^7.2.0"
 pytest-cov  = "^4.0.0"
+pytest-mock = "^3.10.0"  
 mypy        = "^1.5.1"
 pre-commit  = "^3.4.0"
 tox         = "^4.11.1"
+ruff        = "^0.1.0" 
 
 [tool.poetry.group.docs.dependencies]
 mkdocs          = "^1.4.2"
@@ -130,26 +132,31 @@ module = [
 ]
 ignore_missing_imports = true
 
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["cubexpress/test"]
 python_files = ["test_*.py"]
-python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests that require GEE connection",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:httplib2.*:",
+]
 
 [tool.coverage.run]
-branch = true
 source = ["cubexpress"]
+omit = ["tests/*"]
 
 [tool.coverage.report]
-skip_empty = true
-precision = 2
 exclude_lines = [
-  "pragma: no cover",
-  "def __repr__",
-  "raise AssertionError",
-  "raise NotImplementedError",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
-  "@abstractmethod",
-  "@overload",
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
 ]

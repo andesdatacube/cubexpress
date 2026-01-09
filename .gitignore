@@ -186,3 +186,4 @@ cython_debug/
 
 marta/2020_pp.tif
 *.deb
+__pycache__/

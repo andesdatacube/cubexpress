@@ -26,7 +26,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python            = ">=3.9"
+python            = "^3.10"
 numpy             = ">=1.26.0, <2.1.0"
 pandas            = ">=2.0.0"
 utm               = ">=0.7.0"

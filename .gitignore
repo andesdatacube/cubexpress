@@ -24,7 +24,7 @@ try_download_mt.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
+
 *$py.class
 images/
 images_deep/
@@ -66,13 +66,11 @@ htmlcov
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
 .hypothesis/
 .pytest_cache/
 cover/
 cubexpress_test/
-*.py
-
+/*.py
 # Translations
 *.mo
 *.pot

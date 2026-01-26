@@ -1,27 +1,31 @@
 from __future__ import annotations
 
-from typing import Any, Final, Set
+from typing import Any, Final
 
 import ee
 import pandas as pd
 from pydantic import BaseModel, field_validator, model_validator
 from pyproj import CRS, Transformer
 
-from cubexpress.exceptions import ValidationError
+from cubexpress.core.exceptions import ValidationError
 
-REQUIRED_KEYS: Final[Set[str]] = {
-    "scaleX", "shearX", "translateX",
-    "scaleY", "shearY", "translateY",
+REQUIRED_KEYS: Final[set[str]] = {
+    "scaleX",
+    "shearX",
+    "translateX",
+    "scaleY",
+    "shearY",
+    "translateY",
 }
 
 
 def rt2lonlat(raster) -> tuple[float, float, float, float]:
     """
     Calculate geographic centroid from raster transform.
-    
+
     Args:
         raster: Object with .crs, .geotransform, .width, .height
-        
+
     Returns:
         Tuple of (lon, lat, x, y) in WGS84
     """
@@ -70,15 +74,11 @@ class RasterTransform(BaseModel):
         geotransform = values.get("geotransform")
 
         if not isinstance(geotransform, dict):
-            raise ValidationError(
-                f"geotransform must be dict, got {type(geotransform)}"
-            )
-        
-        for key in geotransform.keys():
+            raise ValidationError(f"geotransform must be dict, got {type(geotransform)}")
+
+        for key in geotransform:
             if not isinstance(key, str):
-                raise ValidationError(
-                    f"geotransform keys must be strings, got {type(key)}"
-                )
+                raise ValidationError(f"geotransform keys must be strings, got {type(key)}")
 
         missing = REQUIRED_KEYS - set(geotransform.keys())
         if missing:
@@ -90,10 +90,8 @@ class RasterTransform(BaseModel):
 
         for key in REQUIRED_KEYS:
             val = geotransform[key]
-            if not isinstance(val, (int, float)):
-                raise ValidationError(
-                    f"'{key}' must be numeric, got {type(val)}"
-                )
+            if not isinstance(val, int | float):
+                raise ValidationError(f"'{key}' must be numeric, got {type(val)}")
 
         if geotransform["scaleX"] == 0 or geotransform["scaleY"] == 0:
             raise ValidationError("Scale values cannot be zero")
@@ -112,14 +110,14 @@ class RasterTransform(BaseModel):
 class Request(BaseModel):
     """
     Single Earth Engine request with raster transform.
-    
+
     Attributes:
         id: Unique identifier for the request
         raster_transform: Geospatial metadata
         image: EE Image or asset ID
         bands: List of band names to export
     """
-    
+
     id: str
     raster_transform: RasterTransform
     image: Any
@@ -141,7 +139,7 @@ class Request(BaseModel):
 class RequestSet(BaseModel):
     """
     Container for multiple Request instances with bulk validation.
-    
+
     Attributes:
         requestset: List of Request objects
     """
@@ -152,44 +150,57 @@ class RequestSet(BaseModel):
     def create_manifests(self) -> pd.DataFrame:
         """Export raster metadata to pandas DataFrame."""
         points = [rt2lonlat(rt.raster_transform) for rt in self.requestset]
-        lon, lat, x, y = zip(*points)
+        lon, lat, x, y = zip(*points, strict=False)
 
-        return pd.DataFrame([
-            {
-                "id": meta.id,
-                "lon": lon[i],
-                "lat": lat[i],
-                "x": x[i],
-                "y": y[i],
-                "crs": meta.raster_transform.crs,
-                "width": meta.raster_transform.width,
-                "height": meta.raster_transform.height,
-                "geotransform": meta.raster_transform.geotransform,
-                "scale_x": meta.raster_transform.geotransform["scaleX"],
-                "scale_y": meta.raster_transform.geotransform["scaleY"],
-                "manifest": {
-                    meta._expression_key: meta.image,
-                    "fileFormat": "GEO_TIFF",
-                    "bandIds": meta.bands,
-                    "grid": {
-                        "dimensions": {
-                            "width": meta.raster_transform.width,
-                            "height": meta.raster_transform.height,
+        return pd.DataFrame(
+            [
+                {
+                    "id": meta.id,
+                    "lon": lon[i],
+                    "lat": lat[i],
+                    "x": x[i],
+                    "y": y[i],
+                    "crs": meta.raster_transform.crs,
+                    "width": meta.raster_transform.width,
+                    "height": meta.raster_transform.height,
+                    "geotransform": meta.raster_transform.geotransform,
+                    "scale_x": meta.raster_transform.geotransform["scaleX"],
+                    "scale_y": meta.raster_transform.geotransform["scaleY"],
+                    "manifest": {
+                        meta._expression_key: meta.image,
+                        "fileFormat": "GEO_TIFF",
+                        "bandIds": meta.bands,
+                        "grid": {
+                            "dimensions": {
+                                "width": meta.raster_transform.width,
+                                "height": meta.raster_transform.height,
+                            },
+                            "affineTransform": meta.raster_transform.geotransform,
+                            "crsCode": meta.raster_transform.crs,
                         },
-                        "affineTransform": meta.raster_transform.geotransform,
-                        "crsCode": meta.raster_transform.crs,
                     },
-                },
-                "outname": f"{meta.id}.tif",
-            }
-            for i, meta in enumerate(self.requestset)
-        ])
+                    "outname": f"{meta.id}.tif",
+                }
+                for i, meta in enumerate(self.requestset)
+            ]
+        )
 
     def _validate_columns(self) -> None:
         """Validate required columns exist."""
         required = {
-            "id", "lon", "lat", "x", "y", "crs", "width", "height",
-            "geotransform", "scale_x", "scale_y", "manifest", "outname"
+            "id",
+            "lon",
+            "lat",
+            "x",
+            "y",
+            "crs",
+            "width",
+            "height",
+            "geotransform",
+            "scale_x",
+            "scale_y",
+            "manifest",
+            "outname",
         }
         missing = required - set(self._dataframe.columns)
         if missing:
@@ -207,8 +218,8 @@ class RequestSet(BaseModel):
             "width": int,
             "height": int,
             "geotransform": dict,
-            "scale_x": (int, float),
-            "scale_y": (int, float),
+            "scale_x": int | float,
+            "scale_y": int | float,
             "manifest": dict,
             "outname": str,
         }
@@ -217,16 +228,10 @@ class RequestSet(BaseModel):
             for i, val in enumerate(self._dataframe[col]):
                 if isinstance(expected, tuple):
                     if not any(isinstance(val, t) for t in expected):
-                        raise ValidationError(
-                            f"Column '{col}' row {i}: "
-                            f"expected {expected}, got {type(val)}"
-                        )
+                        raise ValidationError(f"Column '{col}' row {i}: " f"expected {expected}, got {type(val)}")
                 else:
                     if not isinstance(val, expected):
-                        raise ValidationError(
-                            f"Column '{col}' row {i}: "
-                            f"expected {expected}, got {type(val)}"
-                        )
+                        raise ValidationError(f"Column '{col}' row {i}: " f"expected {expected}, got {type(val)}")
 
     def _validate_manifest_structure(self) -> None:
         """Validate manifest dictionary structure."""
@@ -235,14 +240,10 @@ class RequestSet(BaseModel):
 
             for key in ["fileFormat", "bandIds", "grid"]:
                 if key not in manifest:
-                    raise ValidationError(
-                        f"Missing '{key}' in manifest for row {i}"
-                    )
+                    raise ValidationError(f"Missing '{key}' in manifest for row {i}")
 
             if not any(k in manifest for k in ["assetId", "expression"]):
-                raise ValidationError(
-                    f"Manifest row {i} needs 'assetId' or 'expression'"
-                )
+                raise ValidationError(f"Manifest row {i} needs 'assetId' or 'expression'")
 
             self._validate_grid_structure(manifest["grid"], i)
 
@@ -250,31 +251,21 @@ class RequestSet(BaseModel):
         """Validate grid structure within manifest."""
         for key in ["dimensions", "affineTransform", "crsCode"]:
             if key not in grid:
-                raise ValidationError(
-                    f"Missing '{key}' in grid for row {row_idx}"
-                )
+                raise ValidationError(f"Missing '{key}' in grid for row {row_idx}")
 
         dims = grid["dimensions"]
         for dim in ["width", "height"]:
             if dim not in dims:
-                raise ValidationError(
-                    f"Missing '{dim}' in dimensions for row {row_idx}"
-                )
+                raise ValidationError(f"Missing '{dim}' in dimensions for row {row_idx}")
             if not isinstance(dims[dim], int) or dims[dim] <= 0:
-                raise ValidationError(
-                    f"'{dim}' must be positive integer, row {row_idx}"
-                )
+                raise ValidationError(f"'{dim}' must be positive integer, row {row_idx}")
 
         aff = grid["affineTransform"]
         for key in REQUIRED_KEYS:
             if key not in aff:
-                raise ValidationError(
-                    f"Missing '{key}' in affineTransform for row {row_idx}"
-                )
-            if not isinstance(aff[key], (int, float)):
-                raise ValidationError(
-                    f"'{key}' must be numeric, row {row_idx}"
-                )
+                raise ValidationError(f"Missing '{key}' in affineTransform for row {row_idx}")
+            if not isinstance(aff[key], int | float):
+                raise ValidationError(f"'{key}' must be numeric, row {row_idx}")
 
     def _validate_dataframe_schema(self) -> None:
         """Orchestrate all dataframe validations."""
@@ -286,7 +277,7 @@ class RequestSet(BaseModel):
     def validate_metadata(self) -> RequestSet:
         """Validate CRS consistency and unique IDs."""
         crs_set = {meta.raster_transform.crs for meta in self.requestset}
-        
+
         for crs in crs_set:
             try:
                 CRS.from_string(crs)

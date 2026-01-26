@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from cubexpress.conversion import geo2utm, lonlat2rt_utm_or_ups, parse_edge_size
-from cubexpress.exceptions import ValidationError
+from cubexpress.core.exceptions import ValidationError
+from cubexpress.geometry.conversion import geo2utm, lonlat2rt_utm_or_ups, parse_edge_size
 
 
 class TestParseEdgeSize:
@@ -58,7 +58,7 @@ class TestGeo2Utm:
     def test_northern_hemisphere(self, sample_coords):
         """Test conversion in northern hemisphere."""
         x, y, crs = geo2utm(sample_coords["lon"], sample_coords["lat"])
-        
+
         assert isinstance(x, float)
         assert isinstance(y, float)
         assert crs.startswith("EPSG:326")  # Northern hemisphere UTM
@@ -67,18 +67,15 @@ class TestGeo2Utm:
         """Test conversion in southern hemisphere."""
         # Sydney, Australia
         x, y, crs = geo2utm(151.2093, -33.8688)
-        
+
         assert isinstance(x, float)
         assert isinstance(y, float)
         assert crs.startswith("EPSG:327")  # Southern hemisphere UTM
 
     def test_valencia_coords(self, sample_coords_valencia):
         """Test conversion for Valencia."""
-        x, y, crs = geo2utm(
-            sample_coords_valencia["lon"], 
-            sample_coords_valencia["lat"]
-        )
-        
+        x, y, crs = geo2utm(sample_coords_valencia["lon"], sample_coords_valencia["lat"])
+
         assert crs == "EPSG:32630"  # UTM zone 30N
         assert 700000 < x < 800000  # Reasonable easting
         assert 4300000 < y < 4400000  # Reasonable northing
@@ -89,11 +86,8 @@ class TestLonlat2RtUtmOrUps:
 
     def test_basic_conversion(self, sample_coords):
         """Test basic conversion works."""
-        x, y, crs = lonlat2rt_utm_or_ups(
-            sample_coords["lon"], 
-            sample_coords["lat"]
-        )
-        
+        x, y, crs = lonlat2rt_utm_or_ups(sample_coords["lon"], sample_coords["lat"])
+
         assert isinstance(x, float)
         assert isinstance(y, float)
         assert crs.startswith("EPSG:")
@@ -101,11 +95,8 @@ class TestLonlat2RtUtmOrUps:
     def test_matches_geo2utm_approximately(self, sample_coords):
         """Both functions should give similar results."""
         x1, y1, crs1 = geo2utm(sample_coords["lon"], sample_coords["lat"])
-        x2, y2, crs2 = lonlat2rt_utm_or_ups(
-            sample_coords["lon"], 
-            sample_coords["lat"]
-        )
-        
+        x2, y2, crs2 = lonlat2rt_utm_or_ups(sample_coords["lon"], sample_coords["lat"])
+
         assert crs1 == crs2
         assert abs(x1 - x2) < 1  # Within 1 meter
         assert abs(y1 - y2) < 1

@@ -13,6 +13,7 @@ from cubexpress.core.exceptions import MergeError
 from cubexpress.download.merge import merge_tifs
 from cubexpress.geometry.roi import _square_roi
 
+
 class TestMergeTifs:
     """Tests for merge_tifs function."""
 
@@ -122,7 +123,7 @@ class TestSquareRoi:
 
     def test_coordinates_in_degrees(self):
         """Polygon coordinates should be in degrees."""
-        with patch("cubexpress.geometry.roi.ee") as mock_ee:            
+        with patch("cubexpress.geometry.roi.ee") as mock_ee:
 
             _square_roi(lon=0.0, lat=0.0, edge_size=100, scale=10)
 

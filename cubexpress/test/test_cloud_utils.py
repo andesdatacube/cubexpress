@@ -30,7 +30,7 @@ class TestSensorsDict:
         assert "LANDSAT_BOA" in SENSORS
 
     def test_sensor_config_type(self):
-        for key, config in SENSORS.items():
+        for config in SENSORS.values():
             assert isinstance(config, SensorConfig)
 
 

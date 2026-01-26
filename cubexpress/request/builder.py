@@ -221,7 +221,7 @@ def _build_roi_requests(
 
 
 def requestset_from_ids(
-    asset_ids: list[str],
+    asset_ids: str | list[str],
     bands: list[str],
     scale: int,
     toa: bool | None = None,
@@ -229,7 +229,7 @@ def requestset_from_ids(
     """Build requests for full scenes by asset ID.
 
     Args:
-        asset_ids: Earth Engine asset IDs
+        asset_ids: Earth Engine asset ID (string) or list of asset IDs
         bands: Band names to download
         scale: Resolution in meters
         toa: Apply TOA processing. If None (default), auto-detects from asset ID.
@@ -240,6 +240,10 @@ def requestset_from_ids(
     Returns:
         RequestSet ready for get_cube()
     """
+    # Normalize to list
+    if isinstance(asset_ids, str):
+        asset_ids = [asset_ids]
+    
     if not asset_ids:
         raise ValidationError("asset_ids cannot be empty")
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from cubexpress.exceptions import ValidationError
-from cubexpress.geotyping import REQUIRED_KEYS, RasterTransform, rt2lonlat
+from cubexpress.core.exceptions import ValidationError
+from cubexpress.core.types import REQUIRED_KEYS, RasterTransform, rt2lonlat
 
 
 class TestRasterTransform:
@@ -19,7 +19,7 @@ class TestRasterTransform:
             width=256,
             height=256,
         )
-        
+
         assert rt.crs == "EPSG:32630"
         assert rt.width == 256
         assert rt.height == 256
@@ -33,7 +33,7 @@ class TestRasterTransform:
             width=512,
             height=256,
         )
-        
+
         assert rt.width == 512
         assert rt.height == 256
 
@@ -45,7 +45,7 @@ class TestRasterTransform:
             "translateX": 500000.0,
             # Missing scaleY, shearY, translateY
         }
-        
+
         with pytest.raises(ValidationError, match="Missing required keys"):
             RasterTransform(
                 crs="EPSG:32630",
@@ -57,7 +57,7 @@ class TestRasterTransform:
     def test_extra_geotransform_key_raises(self, sample_geotransform):
         """Should raise error if geotransform has unexpected keys."""
         with_extra = {**sample_geotransform, "extraKey": 999}
-        
+
         with pytest.raises(ValidationError, match="Unexpected keys"):
             RasterTransform(
                 crs="EPSG:32630",
@@ -69,7 +69,7 @@ class TestRasterTransform:
     def test_zero_scale_raises(self, sample_geotransform):
         """Should raise error if scale is zero."""
         zero_scale = {**sample_geotransform, "scaleX": 0}
-        
+
         with pytest.raises(ValidationError, match="cannot be zero"):
             RasterTransform(
                 crs="EPSG:32630",
@@ -108,7 +108,7 @@ class TestRasterTransform:
             "shearY": 0,
             "translateY": 4500000.0,
         }
-        
+
         with pytest.raises(ValidationError, match="must be numeric"):
             RasterTransform(
                 crs="EPSG:32630",
@@ -139,14 +139,14 @@ class TestRt2Lonlat:
             width=256,
             height=256,
         )
-        
+
         lon, lat, x, y = rt2lonlat(rt)
-        
+
         assert isinstance(lon, float)
         assert isinstance(lat, float)
         assert isinstance(x, float)
         assert isinstance(y, float)
-        
+
         # Should be reasonable coordinates
         assert -180 <= lon <= 180
         assert -90 <= lat <= 90
@@ -159,15 +159,15 @@ class TestRt2Lonlat:
             width=100,
             height=100,
         )
-        
+
         lon, lat, x, y = rt2lonlat(rt)
-        
+
         # Center of 100x100 at scale 10 from (500000, 4500000)
         # x_center = 500000 + 10 * 50 = 500500
         # y_center = 4500000 + (-10) * 50 = 4499500
         expected_x = 500000.0 + 10 * 50
         expected_y = 4500000.0 + (-10) * 50
-        
+
         assert abs(x - expected_x) < 0.01
         assert abs(y - expected_y) < 0.01
 
@@ -178,8 +178,8 @@ class TestRequiredKeys:
     def test_all_keys_present(self):
         """Should have all 6 affine transform keys."""
         expected = {"scaleX", "shearX", "translateX", "scaleY", "shearY", "translateY"}
-        assert REQUIRED_KEYS == expected
+        assert expected == REQUIRED_KEYS
 
     def test_immutable(self):
         """REQUIRED_KEYS should be a frozenset or set."""
-        assert isinstance(REQUIRED_KEYS, (set, frozenset))
+        assert isinstance(REQUIRED_KEYS, set | frozenset)

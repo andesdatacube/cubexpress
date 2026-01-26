@@ -59,6 +59,8 @@ pip-log.txt
 pip-delete-this-directory.txt
 htmlcov 
 .tox/
+qa4eo/
+table/
 .nox/
 .coverage
 .coverage.*
@@ -74,7 +76,7 @@ cubexpress_test/
 # Translations
 *.mo
 *.pot
-
+README_V2.md
 # Django stuff:
 *.log
 local_settings.py

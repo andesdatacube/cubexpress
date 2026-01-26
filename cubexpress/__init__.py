@@ -1,59 +1,70 @@
-"""
-CubExpress - Efficient Earth Engine data download and processing.
-
-Main components:
-- lonlat2rt: Convert coordinates to raster transforms
-- s2_table: Query Sentinel-2 metadata with cloud scores
-- sensor_table: Query any sensor metadata (Landsat, S2)
-- table_to_requestset: Build request sets from metadata
-- get_cube: Download Earth Engine data cubes
-
-Constants:
-- LANDSAT_COMMON_OPTIONAL: Set of properties common to all Landsat sensors
-- SENSORS: Dictionary of all supported sensor configurations
-"""
+"""CubeXpress: Earth Engine data cube downloader with optimal parallelization."""
 
 from __future__ import annotations
 
-from cubexpress.cloud_utils import (
-    AGGREGATED_SENSORS,
-    LANDSAT_COMMON_OPTIONAL,
-    S2_BOA_BANDS,
-    S2_COMMON_OPTIONAL,
-    S2_TOA_BANDS,
+# Core types
+from cubexpress.core.types import RasterTransform, Request, RequestSet
+
+# Download functions
+from cubexpress.download import get_cube, get_geotiff, get_numpy_cube
+
+# Formats
+from cubexpress.formats import EEFileFormat, ExportFormat, Formats, VisPresets
+
+# Geometry
+from cubexpress.geometry import geo2utm, lonlat2rt
+
+# Metadata extraction
+from cubexpress.metadata import (
     SENSORS,
+    clear_cache,
+    get_batch_scene_info,
+    get_cache_size,
+    get_scene_info,
     mss_table,
     s2_table,
     sensor_table,
 )
-from cubexpress.conversion import geo2utm, lonlat2rt
-from cubexpress.cube import get_cube
-from cubexpress.geotyping import RasterTransform, Request, RequestSet
-from cubexpress.request import table_to_requestset
+
+# Request building
+from cubexpress.request import requestset_from_ids, table_to_requestset
 
 __all__ = [
-    # Functions
-    "lonlat2rt",
-    "geo2utm",
-    "RasterTransform",
+    # Core types
     "Request",
     "RequestSet",
+    "RasterTransform",
+    # Metadata tables
+    "sensor_table",
     "s2_table",
     "mss_table",
-    "sensor_table",
-    "table_to_requestset",
-    "get_cube",
-    # Constants
-    "AGGREGATED_SENSORS",
-    "LANDSAT_COMMON_OPTIONAL",
-    "S2_COMMON_OPTIONAL",
-    "S2_TOA_BANDS",
-    "S2_BOA_BANDS",
     "SENSORS",
+    # Cache management
+    "clear_cache",
+    "get_cache_size",
+    # Scene info
+    "get_scene_info",
+    "get_batch_scene_info",
+    # Request builders
+    "requestset_from_ids",
+    "table_to_requestset",
+    # Download
+    "get_cube",
+    "get_geotiff",
+    "get_numpy_cube",
+    # Formats
+    "Formats",
+    "VisPresets",
+    "ExportFormat",
+    "EEFileFormat",
+    # Geometry
+    "lonlat2rt",
+    "geo2utm",
 ]
 
 try:
     from importlib.metadata import version
+
     __version__ = version("cubexpress")
 except Exception:
     __version__ = "0.0.0-dev"

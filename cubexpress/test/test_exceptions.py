@@ -4,13 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cubexpress.exceptions import (
-    CubExpressError,
-    DownloadError,
-    MergeError,
-    TilingError,
-    ValidationError,
-)
+from cubexpress.core.exceptions import CubExpressError, DownloadError, MergeError, TilingError, ValidationError
 
 
 class TestExceptionHierarchy:
@@ -47,6 +41,6 @@ class TestExceptionMessages:
         """Should be catchable by base class."""
         with pytest.raises(CubExpressError):
             raise ValidationError("test")
-        
+
         with pytest.raises(CubExpressError):
             raise DownloadError("test")

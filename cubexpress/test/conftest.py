@@ -16,11 +16,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Mock Earth Engine BEFORE any cubexpress import
 # -----------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session", autouse=True)
 def mock_ee_init():
     """
     Mock ee.Initialize() globally to avoid requiring GEE credentials.
-    
+
     This runs automatically for all tests.
     """
     mock_ee = MagicMock()
@@ -35,14 +36,15 @@ def mock_ee_init():
     mock_ee.data = MagicMock()
     mock_ee.ee_exception = MagicMock()
     mock_ee.ee_exception.EEException = Exception
-    
-    with patch.dict(sys.modules, {'ee': mock_ee}):
+
+    with patch.dict(sys.modules, {"ee": mock_ee}):
         yield mock_ee
 
 
 # -----------------------------------------------------------------------------
 # Common test data fixtures
 # -----------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_coords():
@@ -99,6 +101,7 @@ def sample_manifest(sample_geotransform):
 # -----------------------------------------------------------------------------
 # Temporary directory fixtures
 # -----------------------------------------------------------------------------
+
 
 @pytest.fixture
 def temp_cache_dir(tmp_path):

@@ -6,7 +6,7 @@ import hashlib
 import json
 import pathlib
 
-from cubexpress.config import CACHE_DIR
+from cubexpress.core.config import CACHE_DIR
 
 CACHE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -36,24 +36,21 @@ def _cache_key(
     """
     lon_r = round(lon, 4)
     lat_r = round(lat, 4)
-    
-    edge_tuple = (
-        (edge_size, edge_size) if isinstance(edge_size, int) 
-        else tuple(edge_size)
-    )
-    
+
+    edge_tuple = (edge_size, edge_size) if isinstance(edge_size, int) else tuple(edge_size)
+
     signature = [lon_r, lat_r, edge_tuple, scale, collection]
-    
+
     raw = json.dumps(signature, sort_keys=True).encode("utf-8")
     digest = hashlib.md5(raw).hexdigest()
-    
+
     return CACHE_DIR / f"{digest}.parquet"
 
 
 def clear_cache() -> int:
     """
     Remove all cached query results.
-    
+
     Returns:
         Number of files deleted
     """
@@ -67,7 +64,7 @@ def clear_cache() -> int:
 def get_cache_size() -> tuple[int, int]:
     """
     Calculate total cache size.
-    
+
     Returns:
         Tuple of (file_count, total_bytes)
     """

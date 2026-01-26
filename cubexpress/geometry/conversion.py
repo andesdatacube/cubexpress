@@ -5,20 +5,20 @@ from __future__ import annotations
 import utm
 from pyproj import CRS, Transformer
 
-from cubexpress.exceptions import ValidationError
-from cubexpress.geotyping import RasterTransform
+from cubexpress.core.exceptions import ValidationError
+from cubexpress.core.types import RasterTransform
 
 
 def parse_edge_size(edge_size: int | tuple[int, int]) -> tuple[int, int]:
     """
     Parse edge_size input into (width, height) tuple.
-    
+
     Args:
         edge_size: Size specification (int for square, tuple for rectangle)
-        
+
     Returns:
         Tuple of (width, height) in pixels
-        
+
     Raises:
         ValidationError: If input is invalid
     """
@@ -26,34 +26,30 @@ def parse_edge_size(edge_size: int | tuple[int, int]) -> tuple[int, int]:
         if edge_size <= 0:
             raise ValidationError(f"edge_size must be positive, got {edge_size}")
         return (edge_size, edge_size)
-    
+
     if len(edge_size) != 2:
-        raise ValidationError(
-            f"edge_size tuple must have 2 elements, got {len(edge_size)}"
-        )
-    
+        raise ValidationError(f"edge_size tuple must have 2 elements, got {len(edge_size)}")
+
     width, height = edge_size
     if width <= 0 or height <= 0:
-        raise ValidationError(
-            f"edge_size values must be positive, got {edge_size}"
-        )
-    
+        raise ValidationError(f"edge_size values must be positive, got {edge_size}")
+
     return (width, height)
 
 
 def geo2utm(lon: float, lat: float) -> tuple[float, float, str]:
     """
     Convert lat/lon to UTM coordinates and EPSG code.
-    
+
     Uses the utm library for standard conversion.
-    
+
     Args:
         lon: Longitude in decimal degrees
         lat: Latitude in decimal degrees
 
     Returns:
         Tuple of (x, y, epsg_code) where EPSG code is formatted as 'EPSG:XXXXX'
-        
+
     Raises:
         utm.OutOfRangeError: If coordinates are outside valid UTM range
     """
@@ -65,34 +61,34 @@ def geo2utm(lon: float, lat: float) -> tuple[float, float, str]:
 def lonlat2rt_utm_or_ups(lon: float, lat: float) -> tuple[float, float, str]:
     """
     Calculate UTM coordinates using pyproj (fallback for geo2utm).
-    
+
     This method is more robust than the utm library and works globally,
     including near the poles. Uses standard UTM zones for all latitudes
     to match Google Earth Engine behavior.
-    
+
     Args:
         lon: Longitude in decimal degrees
         lat: Latitude in decimal degrees
-        
+
     Returns:
         Tuple of (x, y, epsg_code)
     """
     zone = int((lon + 180) // 6) + 1
     epsg_code = 32600 + zone if lat >= 0 else 32700 + zone
     crs = CRS.from_epsg(epsg_code)
-    
+
     transformer = Transformer.from_crs(4326, crs, always_xy=True)
     x, y = transformer.transform(lon, lat)
-    
+
     return float(x), float(y), f"EPSG:{epsg_code}"
 
 
 def lonlat2rt(
-    lon: float, 
-    lat: float, 
-    edge_size: int | tuple[int, int], 
+    lon: float,
+    lat: float,
+    edge_size: int | tuple[int, int],
     scale: int,
-    grid_reference: tuple[float, float, int] | None = None
+    grid_reference: tuple[float, float, int] | None = None,
 ) -> RasterTransform:
     """
     Generate a RasterTransform from geographic coordinates.
@@ -109,7 +105,7 @@ def lonlat2rt(
             - tuple: specifies (width, height) in pixels
         scale: Spatial resolution in meters per pixel
         grid_reference: Tuple of (translate_x, translate_y, native_scale) from a
-            reference image to align the output grid. If provided, the top-left 
+            reference image to align the output grid. If provided, the top-left
             corner will be snapped to the same grid as the reference image.
 
     Returns:
@@ -118,7 +114,7 @@ def lonlat2rt(
     Examples:
         >>> # Without alignment - centered exactly on point
         >>> rt = lonlat2rt(lon=-76.0, lat=40.0, edge_size=512, scale=30)
-        
+
         >>> # With grid alignment from reference image
         >>> rt = lonlat2rt(lon=-76.0, lat=40.0, edge_size=512, scale=30,
         ...                grid_reference=(502530.0, -1959510.0, 60))
@@ -127,9 +123,9 @@ def lonlat2rt(
         x, y, crs = geo2utm(lon, lat)
     except Exception:
         x, y, crs = lonlat2rt_utm_or_ups(lon, lat)
-    
+
     width, height = parse_edge_size(edge_size)
-    
+
     half_width_m = (width * scale) / 2
     half_height_m = (height * scale) / 2
 
@@ -154,9 +150,4 @@ def lonlat2rt(
         "translateY": ul_y,
     }
 
-    return RasterTransform(
-        crs=crs,
-        geotransform=geotransform,
-        width=width,
-        height=height
-    )
+    return RasterTransform(crs=crs, geotransform=geotransform, width=width, height=height)

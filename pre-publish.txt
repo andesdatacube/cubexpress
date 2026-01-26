@@ -61,3 +61,12 @@ poetry version patch
 rm -rf dist build *.egg-info 
 poetry build 
 poetry publish 
+
+
+isort satharmony/ 
+black satharmony/ 
+ruff check --fix satharmony/ 
+poetry version patch 
+rm -rf dist build *.egg-info 
+poetry build 
+poetry publish 

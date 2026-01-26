@@ -21,6 +21,8 @@
 | 1.4 | **Caché de geometrías** - Almacenar transforms por tile/path-row para reutilizar | Media | 1.2 |
 | 1.5 | **Validación de límites GEE** - Detectar y manejar límites de pixels/request dinámicamente | Media | 1.1 |
 
+# falta asumir que tambien se pude descarga como PNG y si es asi se podria visualizar superapido creo no------------
+
 ### FASE 2: Geometría Avanzada (Polígonos y CRS)
 
 | ID | Tarea | Complejidad | Dependencias |

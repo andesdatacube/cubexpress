@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "cubexpress"
-version     = "0.1.28"
+version     = "0.1.33"
 description = "Efficient processing of cubic Earth-observation (EO) data."
 authors     = [
   "Julio Contreras <contrerasnetk@gmail.com>",
@@ -12,7 +12,6 @@ readme       = "README.md"
 keywords     = ["earth-engine", "sentinel-2", "geospatial", "eo", "cube"]
 classifiers  = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -63,7 +62,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 120
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312"]
 
 [tool.isort]
 profile                = "black"
@@ -77,39 +76,49 @@ skip_gitignore         = true
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
-  "F",     # Pyflakes
-  "E",     # pycodestyle errors
-  "W",     # pycodestyle warnings
-  "I",     # isort
-  "UP",    # pyupgrade
-  "B",     # flake8-bugbear
-  "SIM",   # flake8-simplify
-  "C4",    # flake8-comprehensions
-  "RUF",   # Ruff-specific
-  "PTH",   # flake8-use-pathlib
-  "T20",   # flake8-print
-  "PERF",  # Perflint
-  "ASYNC1", # Async checks (remapped from TRIO)
+  "F",      # Pyflakes
+  "E",      # pycodestyle errors
+  "W",      # pycodestyle warnings
+  "I",      # isort
+  "UP",     # pyupgrade
+  "B",      # flake8-bugbear
+  "SIM",    # flake8-simplify
+  "C4",     # flake8-comprehensions
+  "RUF",    # Ruff-specific
+  "PTH",    # flake8-use-pathlib
+  "PERF",   # Perflint
 ]
 
 ignore = [
   "E501",    # Line too long (black handles this)
   "E731",    # Lambda assignment
+  "E722",    # Bare except - usado intencionalmente para fallback robusto
+  "B028",    # stacklevel en warnings - no crítico para este proyecto
+  "SIM108",  # Ternary operator - preferencia de legibilidad
+  "PERF203", # try-except in loop - necesario para manejo de errores GEE
+  "RUF001",  # Ambiguous unicode - emojis intencionales para UX
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "ARG", "PLR2004"]
+"tests/*" = ["S101", "ARG", "PLR2004", "B007", "F841"]
+"cubexpress/test/*" = ["S101", "ARG", "PLR2004", "B007", "F841"]
 "__init__.py" = ["F401", "F403"]
+# Permitir print() para feedback de progreso al usuario
+"cubexpress/animation.py" = ["T201"]
+"cubexpress/cloud_utils.py" = ["T201"]
+"cubexpress/cube.py" = ["T201"]
+"cubexpress/mss_table.py" = ["T201"]
+"cubexpress/request.py" = ["T201"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 files = ["cubexpress"]
 warn_return_any = true
 warn_unused_configs = true
@@ -151,7 +160,7 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = ["cubexpress"]
-omit = ["tests/*"]
+omit = ["tests/*", "cubexpress/test/*"]
 
 [tool.coverage.report]
 exclude_lines = [

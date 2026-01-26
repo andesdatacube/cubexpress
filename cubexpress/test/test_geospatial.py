@@ -11,7 +11,7 @@ from rasterio.transform import from_bounds
 
 from cubexpress.core.exceptions import MergeError
 from cubexpress.download.merge import merge_tifs
-
+from cubexpress.geometry.roi import _square_roi
 
 class TestMergeTifs:
     """Tests for merge_tifs function."""
@@ -104,9 +104,6 @@ class TestSquareRoi:
 
         with patch("cubexpress.geometry.roi.ee") as mock_ee:
             mock_ee.Geometry.Polygon.return_value = mock_polygon
-
-            from cubexpress.core.types import _square_roi
-
             roi = _square_roi(lon=-0.1, lat=51.5, edge_size=256, scale=10)
 
             mock_ee.Geometry.Polygon.assert_called_once()
@@ -119,16 +116,13 @@ class TestSquareRoi:
         with patch("cubexpress.geometry.roi.ee") as mock_ee:
             mock_ee.Geometry.Polygon.return_value = mock_polygon
 
-            from cubexpress.core.types import _square_roi
-
             roi = _square_roi(lon=-0.1, lat=51.5, edge_size=(256, 128), scale=10)
 
             mock_ee.Geometry.Polygon.assert_called_once()
 
     def test_coordinates_in_degrees(self):
         """Polygon coordinates should be in degrees."""
-        with patch("cubexpress.geometry.roi.ee") as mock_ee:
-            from cubexpress.core.types import _square_roi
+        with patch("cubexpress.geometry.roi.ee") as mock_ee:            
 
             _square_roi(lon=0.0, lat=0.0, edge_size=100, scale=10)
 

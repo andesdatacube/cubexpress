@@ -2,47 +2,52 @@
 
 from __future__ import annotations
 
-import logging
+# Core types
+from cubexpress.core.types import RasterTransform, Request, RequestSet
 
+# Download functions
+from cubexpress.download import (
+    download_esa_file,
+    extract_esa_bands,
+    get_cube,
+    get_geotiff,
+    get_image,
+    get_images,
+    get_numpy_cube,
+)
 
-def _silence_external() -> None:
-    for lib in ("rasterio", "rasterio._env", "fiona"):
-        logging.getLogger(lib).setLevel(logging.ERROR)
+# Formats
+from cubexpress.formats import EEFileFormat, ExportFormat, Formats, VisPresets
 
+# Geometry
+from cubexpress.geometry import geo2utm, lonlat2rt
 
-_silence_external()
-
-from cubexpress._core import RasterTransform, Request, RequestSet
-from cubexpress.catalog import (
+# Metadata extraction
+from cubexpress.metadata import (
+    SENSORS,
     clear_cache,
-    geo2utm,
     get_batch_scene_info,
     get_cache_size,
     get_scene_info,
-    lonlat2rt,
     mss_table,
-    requestset_from_ids,
     s2_table,
     sensor_table,
-    table_to_requestset,
 )
-from cubexpress.download import get_cube, get_geotiff, get_image, get_images, get_numpy_cube
-from cubexpress.esa import download_esa_file, extract_esa_bands
-from cubexpress.formats import EEFileFormat, ExportFormat, Formats, VisPresets
-from cubexpress.sensors import SENSORS
+
+# Request building
+from cubexpress.request import requestset_from_ids, table_to_requestset
 
 __all__ = [
     # Core types
     "Request",
     "RequestSet",
     "RasterTransform",
-    # Sensors
-    "SENSORS",
     # Metadata tables
     "sensor_table",
     "s2_table",
     "mss_table",
-    # Cache
+    "SENSORS",
+    # Cache management
     "clear_cache",
     "get_cache_size",
     # Scene info
@@ -65,7 +70,7 @@ __all__ = [
     # Geometry
     "lonlat2rt",
     "geo2utm",
-    # ESA
+    # ESA downloads
     "download_esa_file",
     "extract_esa_bands",
 ]

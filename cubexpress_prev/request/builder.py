@@ -17,10 +17,7 @@ from cubexpress.metadata.tables import _get_grid_reference
 from cubexpress.request.transforms import (
     _apply_toa_to_single,
     _is_mss_collection,
-    _is_toa_collection,
-    _scale_toa_bands,
     _should_apply_mss_toa,
-    _should_apply_toa_scaling,
 )
 
 DEFAULT_FULL_SCENE_SCALE = 10
@@ -103,12 +100,9 @@ def _build_full_scene_requests(
         )
 
         apply_mss_toa = _should_apply_mss_toa(asset_id, toa)
-        apply_toa_scaling = _should_apply_toa_scaling(asset_id, toa)
 
         if apply_mss_toa:
             image_source = _apply_toa_to_single(asset_id, bands)
-        elif apply_toa_scaling:
-            image_source = _scale_toa_bands(asset_id, bands)
         else:
             image_source = asset_id
 
@@ -146,7 +140,6 @@ def _build_roi_requests(
     collection = meta["collection"]
 
     apply_mss_toa = toa and _is_mss_collection(collection)
-    apply_toa_scaling = toa and _is_toa_collection(collection) and not _is_mss_collection(collection)
 
     reqs = []
 
@@ -166,8 +159,6 @@ def _build_roi_requests(
 
                 if apply_mss_toa:
                     images = [_apply_toa_to_single(img, bands) for img in img_ids]
-                elif apply_toa_scaling:
-                    images = [_scale_toa_bands(img, bands) for img in img_ids]
                 else:
                     images = [ee.Image(img) for img in img_ids]
 
@@ -178,8 +169,6 @@ def _build_roi_requests(
 
                 if apply_mss_toa:
                     image_source = _apply_toa_to_single(img_ids[0], bands)
-                elif apply_toa_scaling:
-                    image_source = _scale_toa_bands(img_ids[0], bands)
                 else:
                     image_source = img_ids[0]
 
@@ -200,8 +189,6 @@ def _build_roi_requests(
 
             if apply_mss_toa:
                 image_source = _apply_toa_to_single(full_id, bands)
-            elif apply_toa_scaling:
-                image_source = _scale_toa_bands(full_id, bands)
             else:
                 image_source = full_id
 
@@ -221,7 +208,7 @@ def _build_roi_requests(
 
 
 def requestset_from_ids(
-    asset_ids: list[str],
+    asset_ids: str | list[str],
     bands: list[str],
     scale: int,
     toa: bool | None = None,
@@ -229,7 +216,7 @@ def requestset_from_ids(
     """Build requests for full scenes by asset ID.
 
     Args:
-        asset_ids: Earth Engine asset IDs
+        asset_ids: Earth Engine asset ID (string) or list of asset IDs
         bands: Band names to download
         scale: Resolution in meters
         toa: Apply TOA processing. If None (default), auto-detects from asset ID.
@@ -240,6 +227,10 @@ def requestset_from_ids(
     Returns:
         RequestSet ready for get_cube()
     """
+    # Normalize to list
+    if isinstance(asset_ids, str):
+        asset_ids = [asset_ids]
+
     if not asset_ids:
         raise ValidationError("asset_ids cannot be empty")
 
@@ -270,12 +261,9 @@ def requestset_from_ids(
         )
 
         apply_mss_toa = _should_apply_mss_toa(asset_id, toa)
-        apply_toa_scaling = _should_apply_toa_scaling(asset_id, toa)
 
         if apply_mss_toa:
             image_source = _apply_toa_to_single(asset_id, bands)
-        elif apply_toa_scaling:
-            image_source = _scale_toa_bands(asset_id, bands)
         else:
             image_source = asset_id
 

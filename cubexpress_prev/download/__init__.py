@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from cubexpress.download.batch import get_cube, get_geotiff, get_numpy_cube
 from cubexpress.download.core import download_manifest, download_manifests, temp_workspace
+from cubexpress.download.esa import download_esa_file, extract_esa_bands
 from cubexpress.download.merge import OUTPUT_PROFILES, apply_output_format, convert_to_cog, merge_tifs
+from cubexpress.download.quick import get_image, get_images
 from cubexpress.download.tiling import (
     TilingStrategy,
     calculate_tiling_from_error,
@@ -17,6 +19,8 @@ __all__ = [
     "get_cube",
     "get_geotiff",
     "get_numpy_cube",
+    "get_image",
+    "get_images",
     # Core downloads (internal but exposed)
     "download_manifest",
     "download_manifests",
@@ -31,4 +35,7 @@ __all__ = [
     "calculate_tiling_from_error",
     "generate_tile_manifests",
     "get_manifest_group_key",
+    # ESA downloads
+    "download_esa_file",
+    "extract_esa_bands",
 ]

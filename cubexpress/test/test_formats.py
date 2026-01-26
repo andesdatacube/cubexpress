@@ -1,10 +1,7 @@
 """Tests for formats module."""
-
 import pytest
-
-from cubexpress.formats.presets import VisPresets
-from cubexpress.formats.specs import FORMAT_EXTENSIONS, EEFileFormat, ExportFormat, Formats, VisualizationOptions
-
+from cubexpress.formats.specs import FORMAT_EXTENSIONS, EEFileFormat, ExportFormat, VisualizationOptions
+from cubexpress.formats.presets import Formats, VisPresets
 
 class TestEEFileFormat:
     """Tests for EEFileFormat enum."""

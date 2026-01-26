@@ -42,7 +42,6 @@ def _build_request(
     Returns:
         Modified request dict ready for getPixels/computePixels
     """
-    
 
     request = deepcopy(manifest)
 
@@ -84,7 +83,6 @@ def download_manifest(
         For NUMPY_NDARRAY format: numpy structured array
         For other formats: None (writes to file)
     """
-    
 
     # Build request with format options
     request = _build_request(ulist, export_format)
@@ -131,7 +129,6 @@ def download_manifests(
 
     Only works for GeoTIFF format (other formats cannot be merged).
     """
-    
 
     # Only GeoTIFF can be merged
     if export_format and export_format.file_format != EEFileFormat.GEO_TIFF:

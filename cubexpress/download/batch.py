@@ -12,17 +12,20 @@ import pandas as pd
 from tqdm import tqdm
 
 from cubexpress.core.config import CONFIG
+from cubexpress.core.types import RequestSet
 from cubexpress.download.core import download_manifest, temp_workspace
-from cubexpress.download.merge import apply_output_format, merge_tifs 
-from cubexpress.core.types import RequestSet 
-from cubexpress.utils.logging import setup_logger
-from cubexpress.download.tiling import calculate_tiling_from_error, generate_tile_manifests, get_manifest_group_key
-
-from cubexpress.formats.specs import VISUALIZATION_FORMATS, FORMAT_EXTENSIONS, EEFileFormat, ExportFormat
+from cubexpress.download.merge import apply_output_format, merge_tifs
+from cubexpress.download.tiling import (
+    TilingStrategy,
+    calculate_tiling_from_error,
+    generate_tile_manifests,
+    get_manifest_group_key,
+)
 from cubexpress.formats.presets import Formats
+from cubexpress.formats.specs import FORMAT_EXTENSIONS, VISUALIZATION_FORMATS, EEFileFormat, ExportFormat
 from cubexpress.metadata.sensors import SENSORS
 from cubexpress.metadata.tables import _get_grid_reference
-
+from cubexpress.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -78,7 +81,6 @@ def _resolve_export_format(
 
 def _get_output_extension(export_format: Any) -> str:
     """Get file extension for export format."""
-    
 
     if export_format is None:
         return ".tif"
@@ -245,7 +247,6 @@ def get_cube(
         TFRecord format is NOT supported by getPixels/computePixels.
         Use Earth Engine Export tasks for TFRecord output.
     """
-    
 
     if nworks is None:
         nworks = CONFIG.default_workers
@@ -329,26 +330,24 @@ def _download_with_tiling(
     nworks: int,
 ) -> None:
     """Download with dynamic FIFO queue and progressive merge."""
-    from collections import deque
-    from threading import Lock
-    
+
     n_images = len(dataframe)
-    
+
     # Group by manifest characteristics
     groups = defaultdict(list)
     for _, row in dataframe.iterrows():
         key = get_manifest_group_key(row.manifest)
         groups[key].append(row)
-    
+
     failed = []
-    
+
     with tqdm(total=n_images, desc="Downloading", unit="img") as pbar:
         for rows in groups.values():
             # Test first image to determine if tiling needed
             first_row = rows[0]
             first_manifest = first_row.manifest
             first_outpath = outfolder / f"{first_row.id}{ext}"
-            
+
             try:
                 download_manifest(
                     ulist=first_manifest,
@@ -366,18 +365,18 @@ def _download_with_tiling(
                     failed.append(first_row.id)
                     pbar.update(1)
                     continue
-                
+
                 needs_tiling = True
                 width = first_manifest["grid"]["dimensions"]["width"]
                 height = first_manifest["grid"]["dimensions"]["height"]
                 strategy = calculate_tiling_from_error(str(e), width, height)
                 first_outpath.unlink(missing_ok=True)
-                            
+
             remaining_rows = rows[1:] if not needs_tiling else rows
-            
+
             if not remaining_rows:
                 continue
-            
+
             # Simple parallel download (no tiling)
             if not needs_tiling:
                 with ThreadPoolExecutor(max_workers=nworks) as executor:
@@ -390,7 +389,7 @@ def _download_with_tiling(
                         ): row.id
                         for row in remaining_rows
                     }
-                    
+
                     for future in as_completed(futures):
                         img_id = futures[future]
                         try:
@@ -401,7 +400,7 @@ def _download_with_tiling(
                             logger.error(f"Failed {img_id}: {exc}")
                             failed.append(img_id)
                         pbar.update(1)
-            
+
             # Dynamic FIFO tiling
             else:
                 with temp_workspace() as tmp_dir:
@@ -416,7 +415,7 @@ def _download_with_tiling(
                         pbar,
                         failed,
                     )
-    
+
     if failed:
         logger.warning(f"{len(failed)}/{n_images} downloads failed")
 
@@ -435,32 +434,34 @@ def _download_with_dynamic_queue(
     """Download with dynamic FIFO queue - workers prioritize completing images."""
     from collections import deque
     from threading import Lock
-    
+
     # Build work queue (FIFO)
     work_queue = deque()
     queue_lock = Lock()
-    
+
     # Prepare all images
     img_metadata = {}
-    
+
     for row in rows:
         img_id = row.id
         manifest = row.manifest
         tiles = generate_tile_manifests(manifest, strategy)
-        
+
         img_dir = tmp_dir / img_id
         img_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create tile tasks for this image
         tile_tasks = []
         for idx, tile in enumerate(tiles):
             tile_path = img_dir / f"{idx:06d}.tif"
-            tile_tasks.append({
-                "tile_manifest": tile,
-                "tile_path": tile_path,
-                "tile_idx": idx,
-            })
-        
+            tile_tasks.append(
+                {
+                    "tile_manifest": tile,
+                    "tile_path": tile_path,
+                    "tile_idx": idx,
+                }
+            )
+
         # Store metadata
         img_metadata[img_id] = {
             "pending": deque(tile_tasks),
@@ -470,12 +471,12 @@ def _download_with_dynamic_queue(
             "tile_paths": [],
             "failed": False,
         }
-        
+
         # Add to FIFO queue
         work_queue.append(img_id)
-    
+
     merged = set()
-    
+
     def get_next_task():
         """Worker requests next task - FIFO with dynamic allocation."""
         with queue_lock:
@@ -483,21 +484,21 @@ def _download_with_dynamic_queue(
             for img_id in work_queue:
                 if img_id in failed or img_id in merged:
                     continue
-                
+
                 meta = img_metadata[img_id]
                 if meta["pending"]:
                     task = meta["pending"].popleft()
                     meta["in_progress"] += 1
                     return img_id, task
-            
+
             return None, None
-    
+
     def on_task_complete(img_id: str, tile_path: pathlib.Path, success: bool):
         """Called when a tile finishes downloading."""
         with queue_lock:
             meta = img_metadata[img_id]
             meta["in_progress"] -= 1
-            
+
             if success:
                 meta["completed"] += 1
                 meta["tile_paths"].append(tile_path)
@@ -506,27 +507,22 @@ def _download_with_dynamic_queue(
                 if img_id not in failed:
                     failed.append(img_id)
                     pbar.update(1)
-            
+
             # Check if image is complete
-            if (
-                not meta["pending"]
-                and meta["in_progress"] == 0
-                and not meta["failed"]
-                and img_id not in merged
-            ):
+            if not meta["pending"] and meta["in_progress"] == 0 and not meta["failed"] and img_id not in merged:
                 # Ready to merge
                 return True
-        
+
         return False
-    
+
     def worker_loop():
         """Worker thread main loop."""
         while True:
             img_id, task = get_next_task()
-            
+
             if task is None:
                 break  # No more work
-            
+
             # Download tile
             try:
                 download_manifest(
@@ -538,21 +534,21 @@ def _download_with_dynamic_queue(
             except Exception as exc:
                 logger.error(f"Failed tile {task['tile_idx']} of {img_id}: {exc}")
                 success = False
-            
+
             # Mark complete and check for merge
             should_merge = on_task_complete(img_id, task["tile_path"], success)
-            
+
             if should_merge:
                 # This worker will merge the image
                 try:
                     meta = img_metadata[img_id]
                     tile_files = sorted(meta["tile_paths"])
                     final_path = outfolder / f"{img_id}{ext}"
-                    
+
                     merge_tifs(tile_files, final_path)
                     if fmt and fmt.cog_profile:
                         apply_output_format(final_path, fmt.cog_profile)
-                    
+
                     merged.add(img_id)
                     pbar.update(1)
                 except Exception as exc:
@@ -561,17 +557,18 @@ def _download_with_dynamic_queue(
                         if img_id not in failed:
                             failed.append(img_id)
                             pbar.update(1)
-    
+
     # Launch workers
     with ThreadPoolExecutor(max_workers=nworks) as executor:
         futures = [executor.submit(worker_loop) for _ in range(nworks)]
-        
+
         # Wait for all workers to finish
         for future in as_completed(futures):
             try:
                 future.result()
             except Exception as exc:
                 logger.error(f"Worker error: {exc}")
+
 
 def get_numpy_cube(
     requests: pd.DataFrame | RequestSet,

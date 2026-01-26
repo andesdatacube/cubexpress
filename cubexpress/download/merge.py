@@ -11,7 +11,6 @@ from rasterio.merge import merge as rio_merge
 
 from cubexpress.core.exceptions import MergeError
 
-
 OUTPUT_PROFILES = {
     "geotiff": {},
     "cog": {

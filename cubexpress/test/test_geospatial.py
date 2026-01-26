@@ -102,7 +102,7 @@ class TestSquareRoi:
         """Should create ee.Geometry.Polygon."""
         mock_polygon = MagicMock()
 
-        with patch("cubexpress.geospatial.ee") as mock_ee:
+        with patch("cubexpress.geometry.roi.ee") as mock_ee:
             mock_ee.Geometry.Polygon.return_value = mock_polygon
 
             from cubexpress.core.types import _square_roi
@@ -116,7 +116,7 @@ class TestSquareRoi:
         """Should accept tuple edge_size."""
         mock_polygon = MagicMock()
 
-        with patch("cubexpress.geospatial.ee") as mock_ee:
+        with patch("cubexpress.geometry.roi.ee") as mock_ee:
             mock_ee.Geometry.Polygon.return_value = mock_polygon
 
             from cubexpress.core.types import _square_roi
@@ -127,7 +127,7 @@ class TestSquareRoi:
 
     def test_coordinates_in_degrees(self):
         """Polygon coordinates should be in degrees."""
-        with patch("cubexpress.geospatial.ee") as mock_ee:
+        with patch("cubexpress.geometry.roi.ee") as mock_ee:
             from cubexpress.core.types import _square_roi
 
             _square_roi(lon=0.0, lat=0.0, edge_size=100, scale=10)

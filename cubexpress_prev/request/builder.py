@@ -230,7 +230,11 @@ def requestset_from_ids(
     # Normalize to list
     if isinstance(asset_ids, str):
         asset_ids = [asset_ids]
+<<<<<<< HEAD:cubexpress_prev/request/builder.py
 
+=======
+    
+>>>>>>> origin/main:cubexpress/request/builder.py
     if not asset_ids:
         raise ValidationError("asset_ids cannot be empty")
 

@@ -22,7 +22,8 @@ def snap_to_grid(
     Snap a raw upper-left corner to the nearest grid-aligned position
     anchored at the MGRS tile origin (ul_x, ul_y).
 
-    The result satisfies:
+    Snaps to the closest node (round), so the shift is at most grid_align / 2
+    in any direction. The result satisfies:
         (translateX - ul_x) % grid_align == 0
         (ul_y - translateY) % grid_align == 0
 
@@ -36,8 +37,8 @@ def snap_to_grid(
     Returns:
         (translateX, translateY) aligned to the grid.
     """
-    tx = ul_x + np.floor((raw_tx - ul_x) / grid_align) * grid_align
-    ty = ul_y - np.floor((ul_y - raw_ty) / grid_align) * grid_align
+    tx = ul_x + np.round((raw_tx - ul_x) / grid_align) * grid_align
+    ty = ul_y - np.round((ul_y - raw_ty) / grid_align) * grid_align
     return tx, ty
 
 

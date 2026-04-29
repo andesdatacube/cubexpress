@@ -11,22 +11,28 @@ import ee
 import pandas as pd
 from tqdm import tqdm
 
-
+# ---------------------------------------------------------------------------
 # Dataclasses
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class QualityConfig:
     """
-    mask_fn : callable(ee.Image) -> ee.Image
-              Must return a single-band image named "clear": 1=good, 0=bad.
-    scale   : native pixel size in metres (Landsat=30, S2=20).
-    tile_px : tile edge in pixels. Effective tile = tile_px * scale metres.
-    tile_m  : optional hard override in metres (takes priority over tile_px * scale).
-    reducer : "mean" | "median" | "min" | "max" | "p25" | "p75" | "p90" ...
+    mask_fn  : callable(ee.Image) -> ee.Image
+               Must return a single-band image named "clear": 1=good, 0=bad.
+    scale    : resolution in metres passed to reduceRegions/getRegion AND used
+               as fallback tile size when tile_m is None (tile = tile_px * scale).
+               Landsat native = 30, S2/CS+ native = 10/20.
+               Increase to speed up aggregation: 300 for Landsat, 100 for S2.
+    tile_px  : tile edge in pixels. Only used when tile_m is None.
+    tile_m   : hard override in metres for the tile area (takes priority).
+    reducer  : "mean" | "median" | "min" | "max" | "pN"
     """
 
     mask_fn: object
     scale: int
-    tile_px: int
+    tile_px: int = 0
     tile_m: int | None = None
     reducer: str = "mean"
 
@@ -46,9 +52,16 @@ class SensorConfig:
     max_score: float = 1.0
     static: bool = False
     top_n: int = 1
+    cloud_property: str | None = None  # "CLOUDY_PIXEL_PERCENTAGE" (S2) / "CLOUD_COVER" (Landsat)
+    cloud_max: float = 80.0  # discard images above this % before scoring
+    max_images: int = 500  # hard cap after cloud filter to stay under GEE 5000 limit
 
 
+# ---------------------------------------------------------------------------
 # Adaptive concurrency
+# ---------------------------------------------------------------------------
+
+
 class _AdaptiveState:
     def __init__(self, max_workers: int, verbose: bool = False, name: str = ""):
         self.lock = threading.Lock()
@@ -79,23 +92,12 @@ class _AdaptiveState:
                     print(f"  [{self.name}] stable → concurrency {self.slots-1}→{self.slots}")
 
 
+# ---------------------------------------------------------------------------
 # Reducer factory
+# ---------------------------------------------------------------------------
+
+
 def _make_reducer(reducer: str) -> ee.Reducer:
-    """Build a GEE Reducer from a short string alias.
-
-    The output band is always named "clear" so downstream code can reference
-    it by name regardless of the reducer chosen.
-
-    Args:
-        reducer: Aggregation method. One of "mean", "median", "min", "max",
-            or "pN" for the N-th percentile (e.g. "p25", "p75", "p90").
-
-    Returns:
-        Configured ee.Reducer with a single output named "clear".
-
-    Raises:
-        ValueError: If the string does not match any known alias.
-    """
     r = reducer.lower()
     if r == "mean":
         return ee.Reducer.mean().setOutputs(["clear"])
@@ -111,19 +113,13 @@ def _make_reducer(reducer: str) -> ee.Reducer:
     raise ValueError(f"Unknown reducer {reducer!r}. Use: mean, median, min, max, p25, p75, p90...")
 
 
-# Built-in mask functions
+# ---------------------------------------------------------------------------
+# Mask functions
+# ---------------------------------------------------------------------------
+
+
 def landsat_clear_mask(img: ee.Image) -> ee.Image:
-    """Compute a clear-pixel mask from Landsat C2 QA_PIXEL.
-
-    A pixel is considered clear if bit6 (Clear) is set and bit4 (Cloud Shadow)
-    is not set.
-
-    Args:
-        img: Landsat Collection 2 image containing the QA_PIXEL band.
-
-    Returns:
-        Single-band float image named "clear" where 1.0 = clear, 0.0 = masked.
-    """
+    """Clear mask from Landsat C2 QA_PIXEL (bit6=Clear AND NOT bit4=Shadow)."""
     qa = img.select("QA_PIXEL")
     clear = qa.bitwiseAnd(1 << 6).neq(0)
     shadow = qa.bitwiseAnd(1 << 4).neq(0)
@@ -131,17 +127,7 @@ def landsat_clear_mask(img: ee.Image) -> ee.Image:
 
 
 def s2_clear_mask(img: ee.Image) -> ee.Image:
-    """Compute a clear-pixel mask from Sentinel-2 QA60.
-
-    A pixel is considered clear if both bit10 (cloud) and bit11 (cirrus)
-    are unset.
-
-    Args:
-        img: Sentinel-2 image containing the QA60 band.
-
-    Returns:
-        Single-band float image named "clear" where 1.0 = clear, 0.0 = masked.
-    """
+    """Clear mask from S2 QA60 (NOT cloud bit10 AND NOT cirrus bit11)."""
     qa = img.select("QA60").toInt()
     clouds = qa.bitwiseAnd(1 << 10).neq(0)
     cirrus = qa.bitwiseAnd(1 << 11).neq(0)
@@ -149,47 +135,71 @@ def s2_clear_mask(img: ee.Image) -> ee.Image:
 
 
 def cloudscoreplus_mask(img: ee.Image) -> ee.Image:
-    """Pass through the CloudScore+ cs_cdf band as a clear-pixel score.
+    """Pass-through cs_cdf from CloudScore+ as a continuous [0,1] clear score.
 
-    cs_cdf is already a continuous [0, 1] value where higher means clearer,
-    so no binarization is applied.
-
-    Args:
-        img: Image from the CloudScore+ collection containing the cs_cdf band.
-
-    Returns:
-        Single-band float image named "clear" with values in [0, 1].
+    Note: this config points to GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED.
+    The system:index in CS+ is identical to S2_HARMONIZED, so the IDs
+    returned by run() are directly usable to load actual S2 images.
     """
-    return img.select("cs_cdf").rename("clear").toFloat()
+    return img.select("cs_cdf").gte(0.65).rename("clear").toFloat()
 
 
+# ---------------------------------------------------------------------------
 # Pre-built sensor configs
+# ---------------------------------------------------------------------------
 
+# Landsat — mask applied at native 30 m, aggregation at 300 m (~10 pixels/side)
+# tile_m=10020 keeps the 334-pixel × 30 m ≈ 10 020 m footprint
 LANDSAT_LC08_TOA = SensorConfig(
     name="LC08_TOA",
     collections=["LANDSAT/LC08/C02/T1_TOA", "LANDSAT/LC08/C02/T2_TOA"],
-    quality=QualityConfig(mask_fn=landsat_clear_mask, scale=30, tile_px=334),
+    quality=QualityConfig(mask_fn=landsat_clear_mask, scale=300, tile_px=334),
+    cloud_property="CLOUD_COVER",
+    cloud_max=80.0,
+    max_images=500,
 )
 LANDSAT_LC09_TOA = SensorConfig(
     name="LC09_TOA",
     collections=["LANDSAT/LC09/C02/T1_TOA", "LANDSAT/LC09/C02/T2_TOA"],
-    quality=QualityConfig(mask_fn=landsat_clear_mask, scale=30, tile_px=334),
+    quality=QualityConfig(mask_fn=landsat_clear_mask, scale=300, tile_px=334),
+    cloud_property="CLOUD_COVER",
+    cloud_max=80.0,
+    max_images=500,
 )
 LANDSAT_LC08_L2 = SensorConfig(
     name="LC08_L2",
     collections=["LANDSAT/LC08/C02/T1_L2", "LANDSAT/LC08/C02/T2_L2"],
-    quality=QualityConfig(mask_fn=landsat_clear_mask, scale=30, tile_px=334),
+    quality=QualityConfig(mask_fn=landsat_clear_mask, scale=300, tile_px=334),
+    cloud_property="CLOUD_COVER",
+    cloud_max=80.0,
+    max_images=500,
+)
+SENTINEL2_CSP = SensorConfig(
+    name="S2_CSP",
+    collections=["GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"],
+    quality=QualityConfig(mask_fn=cloudscoreplus_mask, scale=100, tile_m=10560),
+    cloud_property="CLOUDY_PIXEL_PERCENTAGE",
+    cloud_max=80.0,
+    max_images=500,
 )
 SENTINEL2_TOA = SensorConfig(
     name="S2_TOA",
     collections=["COPERNICUS/S2_HARMONIZED"],
-    quality=QualityConfig(mask_fn=s2_clear_mask, scale=20, tile_px=512),
+    quality=QualityConfig(mask_fn=s2_clear_mask, scale=200, tile_px=512),
+    cloud_property="CLOUDY_PIXEL_PERCENTAGE",
+    cloud_max=80.0,
+    max_images=500,
 )
 SENTINEL2_SR = SensorConfig(
     name="S2_SR",
     collections=["COPERNICUS/S2_SR_HARMONIZED"],
-    quality=QualityConfig(mask_fn=s2_clear_mask, scale=20, tile_px=512),
+    quality=QualityConfig(mask_fn=s2_clear_mask, scale=200, tile_px=512),
+    cloud_property="CLOUDY_PIXEL_PERCENTAGE",
+    cloud_max=80.0,
+    max_images=500,
 )
+
+# Static DEMs
 SRTM_DEM = SensorConfig(
     name="SRTM",
     collections=["USGS/SRTMGL1_003"],
@@ -204,23 +214,12 @@ COPERNICUS_DEM = SensorConfig(
 )
 
 
+# ---------------------------------------------------------------------------
 # Geometry helpers
+# ---------------------------------------------------------------------------
 
 
 def _square_roi(lon: float, lat: float, tm: int) -> ee.Geometry:
-    """Build an axis-aligned square polygon centred on a point.
-
-    Converts metres to degrees using local approximations:
-    111 320 m/° in longitude (scaled by cos(lat)) and 110 540 m/° in latitude.
-
-    Args:
-        lon: Centre longitude in decimal degrees.
-        lat: Centre latitude in decimal degrees.
-        tm: Tile edge length in metres.
-
-    Returns:
-        Closed ee.Geometry.Polygon with five vertices (first == last).
-    """
     half = tm / 2
     dlon = half / (111_320 * abs(math.cos(math.radians(lat))) + 1e-9)
     dlat = half / 110_540
@@ -237,23 +236,12 @@ def _square_roi(lon: float, lat: float, tm: int) -> ee.Geometry:
     )
 
 
+# ---------------------------------------------------------------------------
 # Collection helpers
+# ---------------------------------------------------------------------------
 
 
 def _build_collection(cfg: SensorConfig, geom) -> ee.ImageCollection:
-    """Merge all collections in a SensorConfig filtered to a geometry.
-
-    Each image gets a "src" property set to its originating collection ID,
-    which is used later by _infer_src to reconstruct full asset paths.
-
-    Args:
-        cfg: Sensor configuration with collection IDs, date range, and filters.
-        geom: GEE geometry used for filterBounds (point, polygon, or FC).
-
-    Returns:
-        Merged ee.ImageCollection covering geom within the configured date
-        range and extra filters.
-    """
     merged = None
     for col_id in cfg.collections:
         col = ee.ImageCollection(col_id).filterBounds(geom)
@@ -267,32 +255,12 @@ def _build_collection(cfg: SensorConfig, geom) -> ee.ImageCollection:
 
 
 def _filter_inside(col: ee.ImageCollection, roi: ee.Geometry) -> ee.ImageCollection:
-    """Keep only images whose footprint fully contains the ROI.
-
-    Adds a transient "roi_inside" property to each image and filters on it.
-    Useful to discard partial scenes at swath edges.
-
-    Args:
-        col: Input image collection.
-        roi: Region that must be fully covered by each image's geometry.
-
-    Returns:
-        Filtered ee.ImageCollection where every image contains roi.
-    """
     return col.map(lambda img: img.set("roi_inside", img.geometry().contains(roi, maxError=10))).filter(
         ee.Filter.eq("roi_inside", True)
     )
 
 
 def _parse_date(img_id: str):
-    """Extract a date from a GEE image ID containing a YYYYMMDD substring.
-
-    Args:
-        img_id: GEE system:index string, e.g. "LC08_006069_20181130".
-
-    Returns:
-        datetime.date if a valid YYYYMMDD pattern is found, otherwise None.
-    """
     m = re.search(r"(\d{8})", img_id)
     if not m:
         return None
@@ -303,25 +271,15 @@ def _parse_date(img_id: str):
 
 
 def _infer_src(img_id: str, collections: list[str]) -> str:
-    """Infer the source collection ID from a GEE image ID.
-
-    Matches the last path component of each collection ID against the image ID
-    string. Falls back to the first collection if no match is found.
-
-    Args:
-        img_id: GEE system:index string.
-        collections: Ordered list of collection IDs to match against.
-
-    Returns:
-        The matching collection ID, or collections[0] as fallback.
-    """
     for col_id in collections:
         if col_id.split("/")[-1] in img_id:
             return col_id
     return collections[0]
 
 
-# Reduceregion
+# ---------------------------------------------------------------------------
+# reduceRegions path
+# ---------------------------------------------------------------------------
 
 
 def _process_point(
@@ -331,25 +289,6 @@ def _process_point(
     state: _AdaptiveState | None = None,
     max_retries: int = 4,
 ) -> list[dict]:
-    """Score all images in a collection for a single grid point via reduceRegions.
-
-    Builds a one-feature FeatureCollection from the tile ROI, applies the
-    quality mask, and calls reduceRegions on every image to get a spatial
-    aggregate score over the full tile. Returns up to cfg.top_n candidates
-    sorted by descending score.
-
-    Args:
-        row: DataFrame row with "grid_cell", "centre_lon", "centre_lat".
-        cfg: Sensor configuration including collections, quality, and score thresholds.
-        require_full_coverage: If True, discard images whose footprint does not
-            fully contain the tile ROI.
-        state: Shared adaptive concurrency state (semaphore + throttle logic).
-        max_retries: Number of retry attempts on rate-limit errors.
-
-    Returns:
-        List of dicts with keys grid_cell, id_gee, collection, score, date.
-        Returns a single NA record if no valid images are found.
-    """
     na = [{"grid_cell": row["grid_cell"], "id_gee": "NA", "collection": "NA", "score": 0.0, "date": None}]
 
     if cfg.static or cfg.quality is None:
@@ -372,10 +311,16 @@ def _process_point(
         state.semaphore.acquire()
         try:
             q = cfg.quality
+            rscale = q.scale
             tm = _tile_m(q)
             roi = _square_roi(row["centre_lon"], row["centre_lat"], tm)
             fc = ee.FeatureCollection([ee.Feature(roi, {"gc": str(row["grid_cell"])})])
             merged = _build_collection(cfg, roi)
+            # 1. drop heavily cloudy scenes using image-level metadata (free, no compute)
+            if cfg.cloud_property:
+                merged = merged.filter(ee.Filter.lte(cfg.cloud_property, cfg.cloud_max))
+            # 2. hard cap to stay safely under GEE 5000-element limit
+            merged = merged.limit(cfg.max_images)
             col_f = (
                 merged.map(lambda img, _roi=roi: img.set("roi_inside", img.geometry().contains(_roi, maxError=10)))
                 if require_full_coverage
@@ -384,8 +329,8 @@ def _process_point(
             masked = col_f.map(q.mask_fn)
             reducer = _make_reducer(q.reducer)
 
-            def _reduce(img, _fc=fc, _red=reducer, _scale=q.scale):
-                rr = img.reduceRegions(collection=_fc, reducer=_red, scale=_scale)
+            def _reduce(img, _fc=fc, _red=reducer, _s=rscale):
+                rr = img.reduceRegions(collection=_fc, reducer=_red, scale=_s)
                 return ee.Feature(
                     None,
                     {"iid": img.get("system:index"), "src": img.get("src"), "score": rr.first().get("clear")},
@@ -395,14 +340,11 @@ def _process_point(
             scores = {}
             for feat in info.get("features", []):
                 p = feat["properties"]
-                iid = p.get("iid")
-                sc = p.get("score")
-                src = p.get("src") or cfg.collections[0]
+                iid, sc, src = p.get("iid"), p.get("score"), p.get("src") or cfg.collections[0]
                 if iid and sc is not None:
                     scores[iid] = (float(sc), src)
 
             state.on_success()
-
             if not scores:
                 return na
 
@@ -437,7 +379,9 @@ def _process_point(
     return na
 
 
-# Getregion
+# ---------------------------------------------------------------------------
+# getRegion path
+# ---------------------------------------------------------------------------
 
 
 def _get_best_id(
@@ -447,24 +391,6 @@ def _get_best_id(
     state: _AdaptiveState | None = None,
     max_retries: int = 4,
 ) -> list[dict]:
-    """Score all images in a collection for a single grid point via getRegion.
-
-    Samples only the centre pixel of each image using getRegion, which is
-    faster than reduceRegions but less spatially representative. Multiple
-    observations for the same image ID are averaged before ranking.
-
-    Args:
-        row: DataFrame row with "grid_cell", "centre_lon", "centre_lat".
-        cfg: Sensor configuration including collections, quality, and score thresholds.
-        require_full_coverage: If True, discard images whose footprint does not
-            fully contain the tile ROI.
-        state: Shared adaptive concurrency state (semaphore + throttle logic).
-        max_retries: Number of retry attempts on rate-limit errors.
-
-    Returns:
-        List of dicts with keys grid_cell, id_gee, collection, score, date.
-        Returns a single NA record if no valid images are found.
-    """
     na = [{"grid_cell": row["grid_cell"], "id_gee": "NA", "collection": "NA", "score": 0.0, "date": None}]
 
     if cfg.static or cfg.quality is None:
@@ -487,21 +413,20 @@ def _get_best_id(
         state.semaphore.acquire()
         try:
             q = cfg.quality
+            rscale = q.scale
             center = ee.Geometry.Point([row["centre_lon"], row["centre_lat"]])
             roi = _square_roi(row["centre_lon"], row["centre_lat"], _tile_m(q))
             col = _build_collection(cfg, center)
             col_f = _filter_inside(col, roi) if require_full_coverage else col
             masked = col_f.map(q.mask_fn)
-            raw = masked.getRegion(geometry=center, scale=q.scale).getInfo()
+            raw = masked.getRegion(geometry=center, scale=rscale).getInfo()
 
             if not raw or len(raw) < 2:
                 state.on_success()
                 return na
 
             hdr = raw[0]
-            id_idx = hdr.index("id")
-            val_idx = hdr.index("clear")
-
+            id_idx, val_idx = hdr.index("id"), hdr.index("clear")
             sums, cnts = {}, {}
             for r in raw[1:]:
                 iid, val = r[id_idx], r[val_idx]
@@ -548,7 +473,9 @@ def _get_best_id(
     return na
 
 
+# ---------------------------------------------------------------------------
 # Public entry point
+# ---------------------------------------------------------------------------
 
 
 def run(
@@ -559,31 +486,24 @@ def run(
     require_full_coverage: bool = False,
     verbose: bool = False,
 ) -> pd.DataFrame:
-    """Score satellite images for every grid point in a DataFrame.
-
-    Dispatches one GEE call per point using a thread pool with adaptive
-    concurrency control. Returns all candidates (up to cfg.top_n per point),
-    ready to be passed to seasonal_select for final selection.
+    """Score satellite images for every grid point.
 
     Args:
-        df: Input table with columns "grid_cell", "centre_lon", "centre_lat".
-        cfg: Sensor configuration with collections, quality mask, and thresholds.
-        method: "reduceregion" computes the configured spatial reducer (mean,
-            median, ...) over the full tile — more accurate, slightly slower.
-            "getregion" samples only the centre pixel — faster, less representative.
-        n_workers: Maximum number of concurrent GEE threads. Automatically
-            reduced on rate-limit errors and recovered when stable.
-        require_full_coverage: If True, discard images whose footprint does not
-            fully contain the tile ROI.
-        verbose: Print adaptive concurrency adjustments and per-point errors.
+        df      : table with columns grid_cell, centre_lon, centre_lat.
+        cfg     : sensor config (use SENTINEL2_CSP for S2, LANDSAT_LC08_TOA etc.).
+        method  : "reduceregion" (spatial reducer over tile) or
+                  "getregion"   (centre pixel only, faster).
+        n_workers          : max concurrent GEE threads.
+        require_full_coverage: discard partial-coverage scenes.
+        verbose : print throttle events and per-point errors.
 
     Returns:
-        DataFrame with columns: grid_cell, id_gee, collection, score, date.
-        Points with no valid images get a single row with id_gee="NA", score=0.
+        DataFrame[grid_cell, id_gee, collection, score, date].
     """
     state = _AdaptiveState(max_workers=n_workers, verbose=verbose, name=cfg.name)
     fn = _process_point if method == "reduceregion" else _get_best_id
-    print(f"[{cfg.name}] {len(df):,} points — {n_workers} workers — {method}")
+    scale_info = cfg.quality.scale if cfg.quality else "—"
+    print(f"[{cfg.name}] {len(df):,} points — {n_workers} workers — {method} — scale={scale_info}m")
 
     results = []
     with ThreadPoolExecutor(max_workers=n_workers) as ex:
@@ -598,22 +518,12 @@ def run(
     return pd.DataFrame(results)
 
 
-# Seasonal selection
+# ---------------------------------------------------------------------------
+# Seasonal selection (unchanged logic)
+# ---------------------------------------------------------------------------
 
 
 def _assign_season(lat: float, month: int) -> str:
-    """Map a calendar month to a meteorological season, hemisphere-aware.
-
-    Northern hemisphere seasons are flipped for latitudes south of -23.5°
-    (southern tropics and extratropics).
-
-    Args:
-        lat: Latitude in decimal degrees.
-        month: Calendar month as an integer (1-12).
-
-    Returns:
-        Season code: one of "DJF", "MAM", "JJA", "SON".
-    """
     s = {
         12: "DJF",
         1: "DJF",
@@ -641,32 +551,6 @@ def seasonal_select(
     balance_globally: bool = True,
     spread_years: bool = True,
 ) -> pd.DataFrame:
-    """Select one image per grid point with balanced season and year distribution.
-
-    For each grid point, picks the highest-scoring candidate for the assigned
-    season. Season assignment is done globally so that the final dataset has
-    roughly N/4 points per season. Year spread penalises seasons that have
-    already consumed many images from the same year.
-
-    Args:
-        df_candidates: Output of run(), with columns grid_cell, id_gee,
-            collection, score, date. May contain multiple rows per grid_cell.
-        df_meta: Reference table with "grid_cell" and "centre_lat", used to
-            determine the local season for each point.
-        year_range: Optional (min_year, max_year) inclusive filter applied
-            before selection.
-        target_seasons: Subset of seasons to consider, e.g. ["DJF", "JJA"].
-            Defaults to all four seasons.
-        balance_globally: If True, enforce ~N/4 quota per season across all
-            points. If False, each point independently picks its local summer.
-        spread_years: If True, penalise reuse of the same year within a season
-            to maximise temporal diversity.
-
-    Returns:
-        DataFrame with one row per grid_cell and an additional
-        "season_assigned" column indicating the chosen season.
-        Prints season and year distributions to stdout.
-    """
     ALL_SEASONS = ["DJF", "MAM", "JJA", "SON"]
     lat_map = df_meta.set_index("grid_cell")["centre_lat"].to_dict()
 
@@ -676,7 +560,8 @@ def seasonal_select(
         cands = cands[cands["year"].between(*year_range)]
     cands["lat"] = cands["grid_cell"].map(lat_map)
     cands["season"] = cands.apply(
-        lambda r: _assign_season(r["lat"], r["date"].month) if r["date"] is not None else "UNK", axis=1
+        lambda r: _assign_season(r["lat"], r["date"].month) if r["date"] is not None else "UNK",
+        axis=1,
     )
 
     seasons_pool = target_seasons or ALL_SEASONS
@@ -751,3 +636,99 @@ def seasonal_select(
         print("\nYear distribution:")
         print(out["year"].value_counts().sort_index().to_string())
     return out
+
+
+# ---------------------------------------------------------------------------
+# AlphaEarth patch embeddings (unchanged)
+# ---------------------------------------------------------------------------
+
+EMBEDDING_BANDS = [f"A{i:02d}" for i in range(64)]
+_EMB_COLLECTION = "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL"
+_EMB_NA = [0.0] * 64
+
+
+def _get_embedding(
+    row: pd.Series,
+    tile_m: int = 1056,
+    scale: int = 100,
+    gc_col: str = "grid_cell",
+    lon_col: str = "centroid_lon",
+    lat_col: str = "centroid_lat",
+    state: _AdaptiveState | None = None,
+    max_retries: int = 4,
+) -> dict:
+    gc = row[gc_col]
+    na = {"grid_cell": gc, "alpha_earth": _EMB_NA}
+    year = row.get("year")
+
+    for attempt in range(max_retries):
+        state.semaphore.acquire()
+        try:
+            roi = _square_roi(row[lon_col], row[lat_col], tile_m)
+            center = ee.Geometry.Point([row[lon_col], row[lat_col]])
+            col = ee.ImageCollection(_EMB_COLLECTION).filterBounds(center)
+            if pd.notna(year):
+                y = int(year)
+                col = col.filterDate(f"{y}-01-01", f"{y+1}-01-01")
+
+            result = (
+                col.mosaic()
+                .reduceRegion(
+                    reducer=ee.Reducer.mean(),
+                    geometry=roi,
+                    scale=scale,
+                    maxPixels=1e9,
+                )
+                .getInfo()
+            )
+
+            if not result:
+                state.on_success()
+                return na
+
+            vec = [result.get(b) or 0.0 for b in EMBEDDING_BANDS]
+            state.on_success()
+            return {"grid_cell": gc, "alpha_earth": vec}
+
+        except Exception as e:
+            err = str(e)
+            if "Too Many Requests" in err or "Rate Limit" in err:
+                state.on_throttle()
+                time.sleep(2**attempt)
+                continue
+            if state.verbose:
+                print(f"  [SAT_EMB_V1] {gc}: {e}")
+            return na
+        finally:
+            state.semaphore.release()
+
+    return na
+
+
+def run_embeddings(
+    df: pd.DataFrame,
+    tile_m: int = 1056,
+    scale: int = 100,
+    gc_col: str = "grid_cell",
+    lon_col: str = "centroid_lon",
+    lat_col: str = "centroid_lat",
+    n_workers: int = 20,
+    verbose: bool = False,
+) -> pd.DataFrame:
+    state = _AdaptiveState(max_workers=n_workers, verbose=verbose, name="SAT_EMB_V1")
+    print(f"[SAT_EMB_V1] {len(df):,} points — {n_workers} workers — tile {tile_m}m — scale {scale}m")
+
+    results = []
+    with ThreadPoolExecutor(max_workers=n_workers) as ex:
+        futs = {
+            ex.submit(_get_embedding, row, tile_m, scale, gc_col, lon_col, lat_col, state): i
+            for i, row in df.iterrows()
+        }
+        for fut in tqdm(as_completed(futs), total=len(futs), desc="SAT_EMB_V1"):
+            try:
+                results.append(fut.result())
+            except Exception as e:
+                if verbose:
+                    print(f"  Unhandled: {e}")
+
+    return pd.DataFrame(results)

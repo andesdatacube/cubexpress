@@ -372,11 +372,12 @@ class RequestTable:
     def _repr_html_(self) -> str:
         """Rich HTML summary for Jupyter (falls back to __repr__ in consoles).
 
-        Shows the same information as the text repr — image count, asset, chip
-        size, date range, and the band table — but as styled HTML. Lightweight:
-        no map, no external resources, so it stays instant on every display.
+        Shows image count, asset, chip size, date range, the band table, and a
+        world map with each point (hover shows the image count and coordinates).
         Use .df for individual rows and .info for bands as DataFrames.
         """
+        from collections import defaultdict
+
         from cubexpress.request._worldmap import world_map_svg
 
         n = len(self.rows)
@@ -434,9 +435,9 @@ class RequestTable:
                 f"{band_rows}</tbody></table>"
             )
 
-        # World map with each row's centroid as a dot.
-        points = []
-        seen_pts = set()
+        # World map: count images per point so the hover tooltip can show it.
+        pt_counts = defaultdict(int)
+        pt_coords = {}
         for r in self.rows:
             rt_r = r.raster_transform
             cx = rt_r.translate_x + (rt_r.width * rt_r.scale_x) / 2.0
@@ -451,13 +452,20 @@ class RequestTable:
                 except Exception:
                     continue
             key = (round(lon, 2), round(lat, 2))
-            if key not in seen_pts:
-                seen_pts.add(key)
-                points.append((lon, lat))
+            pt_counts[key] += 1
+            pt_coords[key] = (lon, lat)
+
+        points = [pt_coords[k] for k in pt_coords]
+        counts = [pt_counts[k] for k in pt_coords]
 
         map_html = ""
         if points:
-            map_html = f"<div style='flex:1;min-width:220px;max-width:520px'>{world_map_svg(points)}</div>"
+            map_html = (
+                "<div style='flex:1;display:flex;align-items:center;"
+                "justify-content:center;max-height:520px;overflow:hidden'>"
+                f"{world_map_svg(points, counts=counts, fit_height=True)}"
+                "</div>"
+            )
 
         # Geometry line: honest about multiple transforms (multi-rt tables).
         n_transforms = len(set(r.raster_transform for r in self.rows))
@@ -478,7 +486,7 @@ class RequestTable:
         )
         return (
             "<div style='font-family:sans-serif;line-height:1.4;display:flex;"
-            "gap:18px;align-items:flex-start;width:100%'>"
+            "gap:18px;align-items:center;width:100%'>"
             f"<div style='flex:0 0 auto'>{left}</div>"
             f"{map_html}"
             "</div>"

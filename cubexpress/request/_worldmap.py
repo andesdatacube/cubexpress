@@ -17,38 +17,53 @@ def _lonlat_to_xy(lon: float, lat: float) -> tuple[float, float]:
     return (lon + 180.0), (90.0 - lat)
 
 
-def world_map_svg(points, width_px=None) -> str:
+def world_map_svg(points, width_px=None, counts=None, fit_height=False) -> str:
     """Build a tiny world-map SVG with the given (lon, lat) points as red dots.
 
-    Each dot carries a <title> so hovering shows its lon/lat. Points are clamped
-    to valid ranges. If width_px is None the SVG is responsive (fills its
-    container); pass an int to pin a fixed pixel width.
+    Each dot carries a <title> so hovering shows its image count and lon/lat.
+    Points are clamped to valid ranges.
 
     Args:
         points: iterable of (lon, lat) in degrees.
         width_px: fixed width in px, or None for responsive (100% of container).
+        counts: optional iterable (same length as points) with the number of
+            images at each point, shown in the hover tooltip.
+        fit_height: if True, cap the map height (so it never overflows the row)
+            and let the width follow proportionally.
 
     Returns:
         An inline <svg> string.
     """
+    points = list(points)
+    counts = [None] * len(points) if counts is None else list(counts)
+
     dots = []
-    for lon, lat in points:
+    for (lon, lat), cnt in zip(points, counts):
         lon = max(-180.0, min(180.0, lon))
         lat = max(-90.0, min(90.0, lat))
         x, y = _lonlat_to_xy(lon, lat)
-        # <title> gives a native hover tooltip with the coordinate.
+        if cnt is not None:
+            tip = f"{cnt} image{'s' if cnt != 1 else ''} · lon {lon:.4f}, lat {lat:.4f}"
+        else:
+            tip = f"lon {lon:.4f}, lat {lat:.4f}"
         dots.append(
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" '
             f'fill="#e8483c" stroke="white" stroke-width="0.8">'
-            f"<title>lon {lon:.4f}, lat {lat:.4f}</title>"
+            f"<title>{tip}</title>"
             f"</circle>"
         )
 
-    width_style = "width:100%" if width_px is None else f"width:{width_px}px"
+    if fit_height:
+        size_style = "max-height:480px;width:auto;display:block;margin:0 auto"
+    elif width_px is None:
+        size_style = "width:100%"
+    else:
+        size_style = f"width:{width_px}px"
+
     return (
         f'<svg viewBox="0 0 {_W} {_H}" xmlns="http://www.w3.org/2000/svg" '
         f'preserveAspectRatio="xMidYMid meet" '
-        f'style="{width_style};display:block;background:#f4f8fb;'
+        f'style="{size_style};background:#f4f8fb;'
         f'border:1px solid #e0e0e0;border-radius:4px">'
         f'<g fill="#d8e0e8" stroke="#aab4c0" stroke-width="0.3">{_LAND_PATHS}</g>'
         f"{''.join(dots)}</svg>"

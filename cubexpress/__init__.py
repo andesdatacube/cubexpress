@@ -30,6 +30,7 @@ from cubexpress.geo.construct import (
     bbox_to_rt,
     point_to_rt,
     polygon_to_rt,
+    to_polygon,
 )
 from cubexpress.geo.geometry import point_to_geometry, rt_to_geometry
 from cubexpress.geo.tiling import split_transform
@@ -48,6 +49,7 @@ __all__ = [
     "split_transform",
     "rt_to_geometry",
     "point_to_geometry",
+    "to_polygon",
     # request
     "RequestRow",
     "RequestTable",
@@ -76,3 +78,10 @@ __all__ = [
     "discover_images",
     "add_metrics",
 ]
+
+
+try:
+    from importlib.metadata import version
+    __version__ = version("cubexpress")
+except Exception:
+    __version__ = "0.0.0-dev"

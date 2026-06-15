@@ -5,9 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-import geopandas as gpd
 import pandas as pd
-import pytest
 from pyproj import Transformer
 from shapely import wkb, wkt
 from shapely.geometry import MultiPolygon, Polygon
@@ -22,6 +20,14 @@ from cubexpress.geo.construct import (
 )
 from cubexpress.geo.transform import RasterTransform
 
+import pytest
+
+try:
+    import geopandas as gpd
+    _HAS_GEOPANDAS = True
+except ImportError:
+    gpd = None
+    _HAS_GEOPANDAS = False
 
 # --- UTM zone detection ---
 
@@ -335,6 +341,7 @@ _ALL_FIXTURES = [
 ]
 
 
+@pytest.mark.skipif(not _HAS_GEOPANDAS, reason="geopandas not installed (CI)")
 @pytest.mark.parametrize("fp", _ALL_FIXTURES, ids=lambda p: p.name)
 def test_polygon_to_rt_each_fixture_produces_utm_rt(fp):
     if not fp.exists():
@@ -346,6 +353,7 @@ def test_polygon_to_rt_each_fixture_produces_utm_rt(fp):
     assert rt.crs == "EPSG:32718"
 
 
+@pytest.mark.skipif(not _HAS_GEOPANDAS, reason="geopandas not installed (CI)")
 def test_polygon_to_rt_all_fixtures_converge_to_same_rt():
     """16 fixtures (8 formats x 2 CRS) must yield essentially the same RT,
     within float64 precision (~1 nm tolerance on translates)."""

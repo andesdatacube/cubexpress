@@ -1,18 +1,12 @@
-docs_dir: .
-
-# Project information
 site_name: CubeXpress
 site_url: https://andesdatacube.github.io/cubexpress/
 site_author: IPL-UV
 site_description: A Python package for efficient processing of cubic earth observation (EO) data.
 
-
-# Repository
 repo_url: https://github.com/andesdatacube/cubexpress/
 repo_name: cubexpress
 use_directory_urls: false
 
-# Configuration
 theme:
   name: material
   language: en
@@ -32,50 +26,39 @@ theme:
   font:
     text: Roboto
     code: Roboto Mono
-  logo: ./docs/logo_cubexpress.png
-  favicon: ./docs/logo_cubexpress.png
+  logo: logo_cubexpress.png
+  favicon: logo_cubexpress.png
   features:
     - navigation.instant
-    - navigation.tabs
     - navigation.top
-    - navigation.expand
     - navigation.indexes
-    - header.autohide   
-
 
 extra_css:
-  - ./docs/style.css
+  - style.css
 
-# Page tree
 nav:
-  - Home: 
-    - README.md
-    - Contributing: CONTRIBUTING.md
-    - Changelog: CHANGELOG.md
-    - Code of conduct: CODE_OF_CONDUCT.md
-  - Functions: 
-    - ./docs/functions.md
-  - Processes: 
-    - ./docs/process.md
-  - eeFunctions:
-    - ./docs/comparation.md
-    - Get: ./docs/Comparation/eedatagetPixels.md
-    - Compute: ./docs/Comparation/eedatacomputePixels.md
-    - Conclusion: ./docs/Comparation/conclusion.md
+  - Home: index.md
+  - API Reference: api.md
+  - How it works: process.md
+  - GEE methods:
+    - Overview: comparation.md
+    - getPixels: Comparation/eedatagetPixels.md
+    - computePixels: Comparation/eedatacomputePixels.md
+    - Conclusion: Comparation/conclusion.md
+  - Contributing: CONTRIBUTING.md
 
-# Plugins
 plugins:
   - search
-  - same-dir
-  - mkdocstrings 
-  - awesome-pages
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            docstring_style: google
 
 markdown_extensions:
-  - meta
   - admonition
   - pymdownx.highlight
   - pymdownx.superfences
-  - pymdownx.pathconverter
   - pymdownx.tabbed
-  - mdx_truly_sane_lists
   - pymdownx.tasklist

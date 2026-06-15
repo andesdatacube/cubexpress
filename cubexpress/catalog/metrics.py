@@ -30,7 +30,7 @@ from __future__ import annotations
 from cubexpress.geo.transform import RasterTransform
 from cubexpress.geo.geometry import rt_to_geometry
 from cubexpress.request.table import RequestTable
-
+from typing import Callable
 from dataclasses import replace
 
 
@@ -254,7 +254,7 @@ def _score_row_group(rows, score_fn, wants_sources, target_coarse_pixels):
 
 def add_metrics(
     table: RequestTable,
-    score_fn,
+    score_fn: "Callable",
     *,
     target_coarse_pixels: int = 128,
     batch_size: int = 50,

@@ -80,7 +80,8 @@ def discover_images(
         asset_id: GEE asset id (IMAGE or IMAGE_COLLECTION).
         raster_transform: one RasterTransform, or a list of them. Each becomes
             the geotransform of its discovered rows.
-        start, end: date range 'YYYY-MM-DD' for temporal assets.
+        start: start date 'YYYY-MM-DD' for temporal assets.
+        end: end date 'YYYY-MM-DD' for temporal assets.
         with_bands: fetch band names from the asset (one cheap getInfo, cached).
         mosaic: if set (e.g. "date"), mosaic the result via table.mosaic(by=...).
         batch_size: (multi-rt only) initial rts per server-side batch.

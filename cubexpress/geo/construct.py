@@ -93,7 +93,10 @@ def bbox_to_rt(
     full coverage of the input bbox.
 
     Args:
-        xmin, ymin, xmax, ymax: bounding box coordinates in `crs`.
+        xmin: Minimum x coordinate (longitude or easting) in `crs`.
+        ymin: Minimum y coordinate (latitude or northing) in `crs`.
+        xmax: Maximum x coordinate in `crs`.
+        ymax: Maximum y coordinate in `crs`.
         crs: Coordinate Reference System (EPSG code or WKT).
         scale: Pixel size in CRS units (typically meters for projected CRS).
 

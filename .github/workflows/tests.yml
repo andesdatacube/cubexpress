@@ -24,7 +24,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: 1.8.3
           virtualenvs-create: true
           virtualenvs-in-project: true
 
@@ -39,8 +39,8 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --with dev --no-interaction
 
-      - name: Run tests
-        run: poetry run pytest --cov=cubexpress --cov-report=xml
+      - name: Run tests (EE-dependent tests auto-skip without credentials)
+        run: poetry run pytest -m "not integration" --cov=cubexpress --cov-report=xml
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'

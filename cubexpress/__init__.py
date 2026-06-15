@@ -1,78 +1,80 @@
-"""CubeXpress: Earth Engine data cube downloader with optimal parallelization."""
+"""cubexpress: Earth Engine data cube downloader."""
 
-from __future__ import annotations
-
-import logging
-
-
-def _silence_external() -> None:
-    for lib in ("rasterio", "rasterio._env", "fiona"):
-        logging.getLogger(lib).setLevel(logging.ERROR)
-
-
-_silence_external()
-
-from cubexpress._core import RasterTransform, Request, RequestSet
-from cubexpress.catalog import (
-    clear_cache,
-    geo2utm,
-    get_batch_scene_info,
-    get_cache_size,
-    get_scene_info,
-    lonlat2rt,
-    mss_table,
-    requestset_from_ids,
-    s2_table,
-    sensor_table,
-    table_to_requestset,
+from cubexpress.download.manifest import download_manifest
+from cubexpress.download.merge import merge_tiles
+from cubexpress.download.runner import ExpressResult, express, express_one
+from cubexpress.download.grouping import (
+    cost_signature,
+    cost_signature_from_manifest,
+    group_rows_by_signature,
 )
-from cubexpress.download import get_cube, get_geotiff, get_image, get_images, get_numpy_cube
-from cubexpress.esa import download_esa_file, extract_esa_bands
-from cubexpress.formats import EEFileFormat, ExportFormat, Formats, VisPresets
-from cubexpress.sensors import SENSORS
+from cubexpress.download.tiling import (
+    bytes_per_pixel_from_error,
+    is_size_error,
+    parse_size_error,
+    predict_fits,
+    split_manifest_by_bpp,
+    split_manifest_from_error,
+)
+from cubexpress.geo.construct import (
+    asset_to_rt,
+    bbox_to_rt,
+    point_to_rt,
+    polygon_to_rt,
+)
+from cubexpress.catalog import (
+    AssetInfo,
+    AssetType,
+    clear_asset_type_cache,
+    detect_asset_type,
+    inspect_asset,
+    discover_images,
+    add_metrics,
+)
+
+from cubexpress.geo.tiling import split_transform
+from cubexpress.geo.transform import RasterTransform
+from cubexpress.request.builders import build_from_points
+from cubexpress.request.row import RequestRow
+from cubexpress.request.table import RequestTable
+from cubexpress.geo.geometry import point_to_geometry, rt_to_geometry
+
 
 __all__ = [
-    # Core types
-    "Request",
-    "RequestSet",
+    # geo
     "RasterTransform",
-    # Sensors
-    "SENSORS",
-    # Metadata tables
-    "sensor_table",
-    "s2_table",
-    "mss_table",
-    # Cache
-    "clear_cache",
-    "get_cache_size",
-    # Scene info
-    "get_scene_info",
-    "get_batch_scene_info",
-    # Request builders
-    "requestset_from_ids",
-    "table_to_requestset",
-    # Download
-    "get_cube",
-    "get_geotiff",
-    "get_numpy_cube",
-    "get_image",
-    "get_images",
-    # Formats
-    "Formats",
-    "VisPresets",
-    "ExportFormat",
-    "EEFileFormat",
-    # Geometry
-    "lonlat2rt",
-    "geo2utm",
-    # ESA
-    "download_esa_file",
-    "extract_esa_bands",
+    "point_to_rt",
+    "bbox_to_rt",
+    "polygon_to_rt",
+    "asset_to_rt",
+    "split_transform",
+    "rt_to_geometry",
+    "point_to_geometry",
+    # request
+    "RequestRow",
+    "RequestTable",
+    "build_from_points",
+    # download
+    "download_manifest",
+    "merge_tiles",
+    "is_size_error",
+    "parse_size_error",
+    "split_manifest_from_error",
+    "express",
+    "express_one",
+    "ExpressResult",
+    "predict_fits",
+    "split_manifest_by_bpp",
+    "bytes_per_pixel_from_error",
+    "cost_signature",
+    "cost_signature_from_manifest",
+    "group_rows_by_signature",
+    # catalog
+    "detect_asset_type",
+    "clear_asset_type_cache",
+    "AssetType",
+    "AssetInfo",
+    "inspect_asset",
+    "discover_images",
+    "add_metrics",
 ]
-
-try:
-    from importlib.metadata import version
-
-    __version__ = version("cubexpress")
-except Exception:
-    __version__ = "0.0.0-dev"

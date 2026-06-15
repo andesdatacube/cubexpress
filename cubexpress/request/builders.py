@@ -51,9 +51,7 @@ def build_from_points(
         raise ValueError("points must not be empty")
 
     if ids is not None and len(ids) != len(points):
-        raise ValueError(
-            f"ids has {len(ids)} entries but points has {len(points)}"
-        )
+        raise ValueError(f"ids has {len(ids)} entries but points has {len(points)}")
 
     if ids is None:
         ids = [f"{id_prefix}_{i:04d}" for i in range(len(points))]
@@ -61,11 +59,13 @@ def build_from_points(
     rows = []
     for rid, (lon, lat) in zip(ids, points, strict=True):
         rt = point_to_rt(lon=lon, lat=lat, width=width, height=height, scale=scale)
-        rows.append(RequestRow(
-            id=rid,
-            raster_transform=rt,
-            image=asset,
-            bands=bands,
-        ))
+        rows.append(
+            RequestRow(
+                id=rid,
+                raster_transform=rt,
+                image=asset,
+                bands=bands,
+            )
+        )
 
     return RequestTable(rows=rows)

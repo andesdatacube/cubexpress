@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, overload
 
 from cubexpress.request.row import RequestRow
 
-
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -18,6 +17,7 @@ def _fmt_date(d):
     if isinstance(d, str) and len(d) == 8 and d.isdigit():
         return f"{d[:4]}-{d[4:6]}-{d[6:]}"
     return d
+
 
 @dataclass(frozen=True)
 class RequestTable:
@@ -36,7 +36,6 @@ class RequestTable:
 
     rows: tuple[RequestRow, ...]
 
-
     def __post_init__(self) -> None:
         if isinstance(self.rows, list):
             object.__setattr__(self, "rows", tuple(self.rows))
@@ -44,29 +43,24 @@ class RequestTable:
             raise TypeError(f"rows must be list or tuple, got {type(self.rows).__name__}")
         for i, row in enumerate(self.rows):
             if not isinstance(row, RequestRow):
-                raise TypeError(
-                    f"rows[{i}] must be RequestRow, got {type(row).__name__}"
-                )
+                raise TypeError(f"rows[{i}] must be RequestRow, got {type(row).__name__}")
         ids = [r.id for r in self.rows]
         if len(set(ids)) != len(ids):
             duplicates = sorted({i for i in ids if ids.count(i) > 1})
             raise ValueError(f"Duplicate ids found: {duplicates}")
-
 
     # --- container protocol ---
 
     def __len__(self) -> int:
         return len(self.rows)
 
-
     def __iter__(self) -> Iterator[RequestRow]:
         return iter(self.rows)
-
 
     @overload
     def __getitem__(self, idx: int) -> RequestRow: ...
     @overload
-    def __getitem__(self, idx: slice) -> "RequestTable": ...
+    def __getitem__(self, idx: slice) -> RequestTable: ...
     def __getitem__(self, idx):
         if isinstance(idx, slice):
             return RequestTable(self.rows[idx])
@@ -74,27 +68,21 @@ class RequestTable:
         if hasattr(idx, "__len__") and not isinstance(idx, (int, str)):
             mask = list(idx)
             if len(mask) != len(self.rows):
-                raise ValueError(
-                    f"boolean mask has {len(mask)} entries but table has "
-                    f"{len(self.rows)} rows"
-                )
+                raise ValueError(f"boolean mask has {len(mask)} entries but table has {len(self.rows)} rows")
             kept = tuple(r for r, keep in zip(self.rows, mask) if keep)
             return RequestTable(rows=kept)
         return self.rows[idx]
-
 
     def __contains__(self, item) -> bool:
         if isinstance(item, str):
             return any(r.id == item for r in self.rows)
         return item in self.rows
 
-
     # --- subset operations (immutable: return new RequestTable) ---
 
-    def filter(self, predicate: Callable[[RequestRow], bool]) -> "RequestTable":
+    def filter(self, predicate: Callable[[RequestRow], bool]) -> RequestTable:
         """Return a new RequestTable with rows for which predicate(row) is True."""
         return RequestTable(tuple(r for r in self.rows if predicate(r)))
-
 
     def get(self, row_id: str) -> RequestRow:
         """Return the row whose id == row_id. Raises KeyError if not found."""
@@ -103,16 +91,12 @@ class RequestTable:
                 return r
         raise KeyError(f"No row with id={row_id!r}")
 
-
     # Keys that are shared across all rows of a discover-made table (asset-level
     # info). They're identical in every row, so showing them per-row is noise —
     # they live in the repr instead. to_dataframe() only shows what VARIES.
-    _SHARED_COLS = frozenset(
-        {"crs", "width", "height", "bands", "band_dtypes", "band_scales"}
-    )
+    _SHARED_COLS = frozenset({"crs", "width", "height", "bands", "band_dtypes", "band_scales"})
 
-
-    def to_dataframe(self, full: bool = False) -> "pd.DataFrame":
+    def to_dataframe(self, full: bool = False) -> pd.DataFrame:
         """Render the table as a pandas DataFrame (pandas imported lazily).
 
         By default shows only per-image columns (id, image, date, roi_inside,
@@ -139,13 +123,12 @@ class RequestTable:
             if r.metadata:
                 for k, v in r.metadata.items():
                     if not full and k in self._SHARED_COLS:
-                        continue          # skip shared band_dtypes / band_scales
+                        continue  # skip shared band_dtypes / band_scales
                     record[k] = _fmt_date(v) if k == "date" else v
             records.append(record)
         return pd.DataFrame(records)
-    
 
-    def set_transform(self, **fields) -> "RequestTable":
+    def set_transform(self, **fields) -> RequestTable:
         """Return a new RequestTable with the given transform fields changed on
         every row. Immutable: the original table is unchanged (reassign the
         result).
@@ -176,9 +159,8 @@ class RequestTable:
             new_rt = dataclasses.replace(r.raster_transform, **fields)
             new_rows.append(dataclasses.replace(r, raster_transform=new_rt))
         return RequestTable(rows=tuple(new_rows))
-    
 
-    def select_bands(self, *bands: str) -> "RequestTable":
+    def select_bands(self, *bands: str) -> RequestTable:
         """Return a new RequestTable keeping only the given bands, in order.
 
         Immutable: the original table is unchanged (reassign the result).
@@ -190,7 +172,7 @@ class RequestTable:
 
         The output band ORDER matches the order you pass here: the first band
         you name becomes band 1 in the downloaded GeoTIFF, and so on.
-        
+
         Args:
             *bands: Band names to keep, in the desired output order. Must all
                 exist in the table's current bands.
@@ -211,19 +193,13 @@ class RequestTable:
         available = set(self.rows[0].bands) if self.rows else set()
         missing = [b for b in bands if b not in available]
         if missing:
-            raise ValueError(
-                f"band(s) {missing} not in the table's bands "
-                f"({sorted(available)})."
-            )
+            raise ValueError(f"band(s) {missing} not in the table's bands ({sorted(available)}).")
 
         new_bands = tuple(bands)
-        new_rows = tuple(
-            dataclasses.replace(r, bands=new_bands) for r in self.rows
-        )
+        new_rows = tuple(dataclasses.replace(r, bands=new_bands) for r in self.rows)
         return RequestTable(rows=new_rows)
 
-
-    def mosaic(self, by: str = "date", reducer=None) -> "RequestTable":
+    def mosaic(self, by: str = "date", reducer=None) -> RequestTable:
         """Collapse the table into one mosaic per group (e.g. one per date).
 
         Rows sharing the same date and ROI are fused into a single ee.Image
@@ -241,6 +217,7 @@ class RequestTable:
             A new RequestTable with one mosaic row per group.
         """
         from cubexpress.catalog.mosaic import mosaic_table
+
         return mosaic_table(self, by=by, reducer=reducer)
 
     @property
@@ -252,10 +229,9 @@ class RequestTable:
             table[table.df.score > 0.7]       # filter -> new RequestTable
         """
         return self.to_dataframe()
-    
 
     @property
-    def info(self) -> "pd.DataFrame":
+    def info(self) -> pd.DataFrame:
         """Asset-level info shared by every row: one row per band (name, dtype, scale).
 
         Complements .df (which shows per-image columns). Use .info to inspect
@@ -269,18 +245,19 @@ class RequestTable:
         names = list(first.bands) if first.bands else []
         dtypes = (first.metadata or {}).get("band_dtypes") or {}
         scales = (first.metadata or {}).get("band_scales") or {}
-        return pd.DataFrame([
-            {
-                "band": b,
-                "dtype": dtypes.get(b, "?"),
-                "scale_m": scales.get(b),
-            }
-            for b in names
-        ])
-    
+        return pd.DataFrame(
+            [
+                {
+                    "band": b,
+                    "dtype": dtypes.get(b, "?"),
+                    "scale_m": scales.get(b),
+                }
+                for b in names
+            ]
+        )
 
     @property
-    def transforms(self) -> "_TransformsView":
+    def transforms(self) -> _TransformsView:
         """Summary of the unique RasterTransforms across all rows.
 
         In a single-point discover, all rows share one transform. In multi-point
@@ -298,8 +275,7 @@ class RequestTable:
         n_unique = len(uniques)
         lines = [
             "RequestTable transforms",
-            f"  {n_unique} unique transform{'s' if n_unique != 1 else ''} "
-            f"across {len(self.rows)} rows:",
+            f"  {n_unique} unique transform{'s' if n_unique != 1 else ''} across {len(self.rows)} rows:",
         ]
         if n_unique <= 5:
             for rt, count in uniques.items():
@@ -311,7 +287,6 @@ class RequestTable:
         else:
             lines.append(f"    (too many to list — {n_unique} distinct geometries)")
         return _TransformsView("\n".join(lines))
-
 
     @property
     def ids(self) -> tuple[str, ...]:
@@ -350,10 +325,7 @@ class RequestTable:
         ]
 
         # Dates: range + mosaic hint when several images share a date.
-        all_dates = [
-            r.metadata["date"] for r in self.rows
-            if r.metadata and r.metadata.get("date")
-        ]
+        all_dates = [r.metadata["date"] for r in self.rows if r.metadata and r.metadata.get("date")]
         if all_dates:
             sd = sorted(all_dates)
             n_unique = len(set(all_dates))
@@ -388,19 +360,14 @@ class RequestTable:
             w_sc = max([len("scale")] + [len(scale_of(b)) for b in shown])
 
             lines.append("")
-            lines.append(
-                f"  {'band':<{w_name}}  {'dtype':<{w_dt}}  {'scale':<{w_sc}}"
-            )
+            lines.append(f"  {'band':<{w_name}}  {'dtype':<{w_dt}}  {'scale':<{w_sc}}")
             lines.append(f"  {'─' * w_name}  {'─' * w_dt}  {'─' * w_sc}")
             for b in shown:
-                lines.append(
-                    f"  {b:<{w_name}}  {dtype_of(b):<{w_dt}}  {scale_of(b):<{w_sc}}"
-                )
+                lines.append(f"  {b:<{w_name}}  {dtype_of(b):<{w_dt}}  {scale_of(b):<{w_sc}}")
             if len(names) > MAX_ROWS:
                 lines.append(f"  …  ({len(names) - MAX_ROWS} more bands)")
 
         return "\n".join(lines)
-    
 
     def _repr_html_(self) -> str:
         """Rich HTML summary for Jupyter (falls back to __repr__ in consoles).
@@ -430,10 +397,7 @@ class RequestTable:
         asset_line = next(iter(assets)) if len(assets) == 1 else f"{len(assets)} assets"
 
         # Date range + mosaic hint.
-        all_dates = [
-            r.metadata["date"] for r in self.rows
-            if r.metadata and r.metadata.get("date")
-        ]
+        all_dates = [r.metadata["date"] for r in self.rows if r.metadata and r.metadata.get("date")]
         date_html = ""
         if all_dates:
             sd = sorted(all_dates)
@@ -482,9 +446,8 @@ class RequestTable:
             else:
                 try:
                     from pyproj import Transformer
-                    lon, lat = Transformer.from_crs(
-                        rt_r.crs, "EPSG:4326", always_xy=True
-                    ).transform(cx, cy)
+
+                    lon, lat = Transformer.from_crs(rt_r.crs, "EPSG:4326", always_xy=True).transform(cx, cy)
                 except Exception:
                     continue
             key = (round(lon, 2), round(lat, 2))
@@ -494,21 +457,14 @@ class RequestTable:
 
         map_html = ""
         if points:
-            map_html = (
-                "<div style='flex:1;min-width:220px;max-width:520px'>"
-                f"{world_map_svg(points)}"
-                "</div>"
-            )
+            map_html = f"<div style='flex:1;min-width:220px;max-width:520px'>{world_map_svg(points)}</div>"
 
         # Geometry line: honest about multiple transforms (multi-rt tables).
         n_transforms = len(set(r.raster_transform for r in self.rows))
         if n_transforms == 1:
             geom_html = f"<div style='color:#555'>{rt.width}×{rt.height} px @ {rt.crs}</div>"
         else:
-            geom_html = (
-                f"<div style='color:#555'>{n_transforms} unique transforms "
-                f"· see <code>.transforms</code></div>"
-            )
+            geom_html = f"<div style='color:#555'>{n_transforms} unique transforms · see <code>.transforms</code></div>"
 
         plural = "s" if n != 1 else ""
         left = (
@@ -527,17 +483,16 @@ class RequestTable:
             f"{map_html}"
             "</div>"
         )
-    
+
+
 class _TransformsView:
     """A printable summary of a table's transforms. Renders multiline in the REPL."""
 
     def __init__(self, text: str):
         self._text = text
 
-
     def __repr__(self) -> str:
         return self._text
-
 
     def __str__(self) -> str:
         return self._text

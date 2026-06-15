@@ -6,11 +6,10 @@ import pathlib
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Union
 
+from cubexpress.download.grouping import group_rows_by_signature
 from cubexpress.download.manifest import download_manifest
 from cubexpress.download.merge import merge_tiles
-from cubexpress.download.grouping import group_rows_by_signature
 from cubexpress.download.pool import Job, TileTask, run_pool
 from cubexpress.download.tiling import (
     is_size_error,
@@ -19,9 +18,9 @@ from cubexpress.download.tiling import (
     split_manifest_by_bpp,
     split_manifest_from_error,
 )
-
 from cubexpress.request.row import RequestRow
 from cubexpress.request.table import RequestTable
+
 
 @dataclass(frozen=True)
 class ExpressResult:
@@ -31,6 +30,7 @@ class ExpressResult:
         paths: Mapping of row id → final file path, for rows that succeeded.
         failed: Mapping of row id → exception, for rows that did NOT succeed.
     """
+
     paths: dict[str, pathlib.Path] = field(default_factory=dict)
     failed: dict[str, Exception] = field(default_factory=dict)
 
@@ -47,13 +47,12 @@ class ExpressResult:
         return len(self.failed)
 
     def __repr__(self) -> str:
-        return (f"ExpressResult(succeeded={self.n_succeeded}, "
-                f"failed={self.n_failed}, total={self.total})")
+        return f"ExpressResult(succeeded={self.n_succeeded}, failed={self.n_failed}, total={self.total})"
 
 
 def express(
     table: RequestTable,
-    outfolder: Union[str, pathlib.Path],
+    outfolder: str | pathlib.Path,
     nworkers: int = 8,
     file_format: str = "GEO_TIFF",
     overwrite: bool = False,
@@ -101,8 +100,15 @@ def express(
         # 2. Build jobs per group, probing once per group to learn bpp.
         for gi, (sig, rows) in enumerate(groups.items()):
             learned_bpp = _probe_group_bpp(
-                rows[0], file_format, outfolder, ext, overwrite,
-                paths, failed, verbose, group_index=gi,
+                rows[0],
+                file_format,
+                outfolder,
+                ext,
+                overwrite,
+                paths,
+                failed,
+                verbose,
+                group_index=gi,
             )
 
             for row in rows:
@@ -134,6 +140,7 @@ def express(
             # annotate band names (metadata only) for GeoTIFF outputs
             if file_format == "GEO_TIFF":
                 from cubexpress.download.band_names import set_band_descriptions
+
                 row_by_id = {r.id: r for r in table}
                 for job_id, p in pool_result.paths.items():
                     r = row_by_id.get(job_id)
@@ -142,11 +149,9 @@ def express(
                             set_band_descriptions(p, r.bands)
                         except Exception:
                             pass
-                        
 
     if verbose:
-        print(f"  express: {len(paths)} ok, {len(failed)} failed "
-              f"({len(groups)} group(s), {len(groups)} probe(s))")
+        print(f"  express: {len(paths)} ok, {len(failed)} failed ({len(groups)} group(s), {len(groups)} probe(s))")
 
     return ExpressResult(paths=paths, failed=failed)
 
@@ -179,7 +184,7 @@ def _probe_group_bpp(
     manifest = first_row.to_manifest(file_format=file_format)
     try:
         download_manifest(manifest, out_path=out_path)
-        paths[first_row.id] = out_path   # fit whole; first row is done
+        paths[first_row.id] = out_path  # fit whole; first row is done
         return None
     except Exception as exc:
         if not is_size_error(exc):
@@ -228,14 +233,16 @@ def _build_job(
 
 def _pool_download_fn(file_format: str):
     """Return a download function bound to the file format, for the pool."""
+
     def download_tile(manifest: dict, tile_path: pathlib.Path) -> None:
         download_manifest(manifest, out_path=tile_path)
+
     return download_tile
 
 
 def express_one(
     row: RequestRow,
-    outfolder: Union[str, pathlib.Path],
+    outfolder: str | pathlib.Path,
     nworkers: int = 4,
     file_format: str = "GEO_TIFF",
     overwrite: bool = False,
@@ -284,14 +291,16 @@ def express_one(
     _download_with_retiling(manifest, out_path, nworkers=nworkers)
     if file_format == "GEO_TIFF" and row.bands:
         from cubexpress.download.band_names import set_band_descriptions
+
         try:
             set_band_descriptions(out_path, row.bands)
         except Exception:
-            pass     # band names are nice-to-have; never fail the download
+            pass  # band names are nice-to-have; never fail the download
     return out_path
 
 
 # --- internal helpers ---
+
 
 def _download_with_retiling(
     manifest: dict,
@@ -359,12 +368,9 @@ def _download_tiles_parallel(
     """Download a list of tile manifests in parallel into tmp_dir."""
     paths = [tmp_dir / f"tile_{i:04d}.tif" for i in range(len(tile_manifests))]
     with ThreadPoolExecutor(max_workers=nworkers) as pool:
-        futures = {
-            pool.submit(download_manifest, m, p): (m, p)
-            for m, p in zip(tile_manifests, paths)
-        }
+        futures = {pool.submit(download_manifest, m, p): (m, p) for m, p in zip(tile_manifests, paths)}
         for future in as_completed(futures):
-            future.result()   # re-raise the first failure
+            future.result()  # re-raise the first failure
     return paths
 
 

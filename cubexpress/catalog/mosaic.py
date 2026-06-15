@@ -12,12 +12,12 @@ that happen to share a date are NOT merged together.
 """
 
 from __future__ import annotations
-from cubexpress.request.row import RequestRow
-from cubexpress.request.table import RequestTable
-from dataclasses import replace
 
 import re
+from dataclasses import replace
 
+from cubexpress.request.row import RequestRow
+from cubexpress.request.table import RequestTable
 
 # Trailing tile suffix added by discover_images for same-day tiles: _00, _01...
 _TILE_SUFFIX = re.compile(r"_\d{2,}$")
@@ -45,7 +45,7 @@ def _group_rows_by_date_rt(
     for row in rows:
         date = (row.metadata or {}).get("date")
         if date is None:
-            continue                       # no date -> cannot date-mosaic
+            continue  # no date -> cannot date-mosaic
         key = (date, row.raster_transform)  # rt is frozen -> hashable
         if key not in groups:
             groups[key] = []
@@ -179,9 +179,7 @@ def mosaic_table(table: RequestTable, by: str = "date", reducer=None) -> Request
     if len(table) == 0:
         raise ValueError("table is empty; nothing to mosaic.")
     if by != "date":
-        raise ValueError(
-            f"mosaic(by={by!r}) is not supported yet; only by='date' for now."
-        )
+        raise ValueError(f"mosaic(by={by!r}) is not supported yet; only by='date' for now.")
     if reducer is not None:
         raise ValueError(
             "reducer is reserved for future temporal composites; for by='date' "

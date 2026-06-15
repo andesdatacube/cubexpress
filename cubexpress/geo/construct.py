@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import math   
+import math
 
+import shapely
 from pyproj import Transformer
 from pyproj.aoi import AreaOfInterest
 from pyproj.database import query_utm_crs_info
-
-import shapely
 from shapely.ops import transform as shp_transform
 
 from cubexpress.geo.transform import RasterTransform
@@ -126,7 +125,7 @@ def bbox_to_rt(
 
 def to_polygon(
     geometry,
-) -> "shapely.Polygon | shapely.MultiPolygon":
+) -> shapely.Polygon | shapely.MultiPolygon:
     """Normalize various polygon inputs to a shapely (Multi)Polygon.
 
     Accepts:
@@ -155,19 +154,19 @@ def to_polygon(
     # WKT string
     if isinstance(geometry, str):
         from shapely import wkt
+
         try:
             geom = wkt.loads(geometry)
         except Exception as exc:
             raise ValueError(f"could not parse WKT string: {exc}") from exc
         if not isinstance(geom, (shapely.Polygon, shapely.MultiPolygon)):
-            raise TypeError(
-                f"WKT parsed to {geom.geom_type}, expected Polygon/MultiPolygon."
-            )
+            raise TypeError(f"WKT parsed to {geom.geom_type}, expected Polygon/MultiPolygon.")
         return geom
 
     # GeoJSON dict
     if isinstance(geometry, dict):
         from shapely.geometry import shape
+
         gtype = geometry.get("type")
         if gtype == "FeatureCollection":
             feats = geometry.get("features", [])
@@ -177,12 +176,10 @@ def to_polygon(
         elif gtype == "Feature":
             geom_dict = geometry["geometry"]
         else:
-            geom_dict = geometry            # assume it's a geometry dict
+            geom_dict = geometry  # assume it's a geometry dict
         geom = shape(geom_dict)
         if not isinstance(geom, (shapely.Polygon, shapely.MultiPolygon)):
-            raise TypeError(
-                f"GeoJSON is a {geom.geom_type}, expected Polygon/MultiPolygon."
-            )
+            raise TypeError(f"GeoJSON is a {geom.geom_type}, expected Polygon/MultiPolygon.")
         return geom
 
     raise TypeError(
@@ -248,13 +245,13 @@ def polygon_to_rt(
 
     if not geometry.is_valid:
         from shapely.validation import explain_validity
+
         raise ValueError(f"Invalid polygon: {explain_validity(geometry)}")
 
     # Sanity check: coords vs declared CRS
     xmin, ymin, xmax, ymax = geometry.bounds
     if crs == "EPSG:4326":
-        if not (-180 <= xmin <= 180 and -90 <= ymin <= 90
-                and -180 <= xmax <= 180 and -90 <= ymax <= 90):
+        if not (-180 <= xmin <= 180 and -90 <= ymin <= 90 and -180 <= xmax <= 180 and -90 <= ymax <= 90):
             raise ValueError(
                 f"Declared crs='EPSG:4326' but bounds={geometry.bounds} look projected. "
                 f"Did you forget to pass crs=? (e.g. crs='EPSG:32718')"
@@ -317,9 +314,7 @@ def asset_to_rt(
     elif isinstance(image, ee.Image):
         img = image
     else:
-        raise TypeError(
-            f"image must be str (asset id) or ee.Image, got {type(image).__name__}"
-        )
+        raise TypeError(f"image must be str (asset id) or ee.Image, got {type(image).__name__}")
 
     info = img.getInfo()
 

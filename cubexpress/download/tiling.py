@@ -6,7 +6,6 @@ import re
 from copy import deepcopy
 from typing import Any
 
-from cubexpress.download import manifest
 from cubexpress.geo.tiling import split_transform
 from cubexpress.geo.transform import RasterTransform
 
@@ -115,9 +114,7 @@ def split_manifest_by_bpp(
 
     max_pixels = int((limit_bytes / bytes_per_pixel) * safety_factor)
     if max_pixels < 1:
-        raise ValueError(
-            f"Computed max_pixels={max_pixels}; manifest too costly to split sensibly."
-        )
+        raise ValueError(f"Computed max_pixels={max_pixels}; manifest too costly to split sensibly.")
 
     sub_rts = split_transform(rt, max_pixels=max_pixels)
     return [_manifest_with_rt(manifest, sub_rt) for sub_rt in sub_rts]
@@ -154,12 +151,11 @@ def split_manifest_from_error(
     if bytes_per_pixel <= 0:
         raise ValueError(f"Invalid bytes_per_pixel computed: {bytes_per_pixel}")
 
-    return split_manifest_by_bpp(
-        manifest, bytes_per_pixel, limit_bytes=limit_bytes, safety_factor=safety_factor
-    )
+    return split_manifest_by_bpp(manifest, bytes_per_pixel, limit_bytes=limit_bytes, safety_factor=safety_factor)
 
 
 # --- internal helpers ---
+
 
 def _rt_from_manifest(manifest: dict[str, Any]) -> RasterTransform:
     grid = manifest["grid"]

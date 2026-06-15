@@ -70,15 +70,17 @@ def _horizontal_strips(rt: RasterTransform, tile_height: int) -> list[RasterTran
     y = 0
     while y < rt.height:
         h = min(tile_height, rt.height - y)
-        tiles.append(RasterTransform(
-            crs=rt.crs,
-            translate_x=rt.translate_x,
-            translate_y=rt.translate_y + y * rt.scale_y,
-            scale_x=rt.scale_x,
-            scale_y=rt.scale_y,
-            width=rt.width,
-            height=h,
-        ))
+        tiles.append(
+            RasterTransform(
+                crs=rt.crs,
+                translate_x=rt.translate_x,
+                translate_y=rt.translate_y + y * rt.scale_y,
+                scale_x=rt.scale_x,
+                scale_y=rt.scale_y,
+                width=rt.width,
+                height=h,
+            )
+        )
         y += tile_height
     return tiles
 
@@ -89,17 +91,20 @@ def _vertical_strips(rt: RasterTransform, tile_width: int) -> list[RasterTransfo
     x = 0
     while x < rt.width:
         w = min(tile_width, rt.width - x)
-        tiles.append(RasterTransform(
-            crs=rt.crs,
-            translate_x=rt.translate_x + x * rt.scale_x,
-            translate_y=rt.translate_y,
-            scale_x=rt.scale_x,
-            scale_y=rt.scale_y,
-            width=w,
-            height=rt.height,
-        ))
+        tiles.append(
+            RasterTransform(
+                crs=rt.crs,
+                translate_x=rt.translate_x + x * rt.scale_x,
+                translate_y=rt.translate_y,
+                scale_x=rt.scale_x,
+                scale_y=rt.scale_y,
+                width=w,
+                height=rt.height,
+            )
+        )
         x += tile_width
     return tiles
+
 
 def _grid_tiles(rt: RasterTransform, tile_w: int, tile_h: int) -> list[RasterTransform]:
     """Split into a 2D grid of tiles."""
@@ -110,15 +115,17 @@ def _grid_tiles(rt: RasterTransform, tile_w: int, tile_h: int) -> list[RasterTra
         x = 0
         while x < rt.width:
             w = min(tile_w, rt.width - x)
-            tiles.append(RasterTransform(
-                crs=rt.crs,
-                translate_x=rt.translate_x + x * rt.scale_x,
-                translate_y=rt.translate_y + y * rt.scale_y,
-                scale_x=rt.scale_x,
-                scale_y=rt.scale_y,
-                width=w,
-                height=h,
-            ))
+            tiles.append(
+                RasterTransform(
+                    crs=rt.crs,
+                    translate_x=rt.translate_x + x * rt.scale_x,
+                    translate_y=rt.translate_y + y * rt.scale_y,
+                    scale_x=rt.scale_x,
+                    scale_y=rt.scale_y,
+                    width=w,
+                    height=h,
+                )
+            )
             x += tile_w
         y += tile_h
     return tiles

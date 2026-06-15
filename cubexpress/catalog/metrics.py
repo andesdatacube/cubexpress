@@ -27,11 +27,12 @@ regardless of patch size.
 
 from __future__ import annotations
 
-from cubexpress.geo.transform import RasterTransform
-from cubexpress.geo.geometry import rt_to_geometry
-from cubexpress.request.table import RequestTable
-from typing import Callable
+from collections.abc import Callable
 from dataclasses import replace
+
+from cubexpress.geo.geometry import rt_to_geometry
+from cubexpress.geo.transform import RasterTransform
+from cubexpress.request.table import RequestTable
 
 
 def _coarse_scale(
@@ -64,9 +65,7 @@ def _coarse_scale(
         ValueError: if target_coarse_pixels is not a positive integer.
     """
     if target_coarse_pixels <= 0:
-        raise ValueError(
-            f"target_coarse_pixels must be > 0, got {target_coarse_pixels}"
-        )
+        raise ValueError(f"target_coarse_pixels must be > 0, got {target_coarse_pixels}")
 
     native_x = abs(rt.scale_x)
     native_y = abs(rt.scale_y)
@@ -101,15 +100,15 @@ def _coverage_value(image, geometry, scale):
     import ee
 
     band0 = image.select(0)
-    mask = band0.mask()                       # 1 where data, 0 where nodata
+    mask = band0.mask()  # 1 where data, 0 where nodata
     reduced = mask.reduceRegion(
-        reducer=ee.Reducer.mean(),            # mean of 0/1 = valid fraction
+        reducer=ee.Reducer.mean(),  # mean of 0/1 = valid fraction
         geometry=geometry,
         scale=scale,
         maxPixels=int(1e9),
         bestEffort=True,
     )
-    band_name = band0.bandNames().get(0)      # name varies by sensor
+    band_name = band0.bandNames().get(0)  # name varies by sensor
     return ee.Number(reduced.get(band_name)).multiply(100)
 
 
@@ -145,15 +144,14 @@ def _validate_score_fn(score_fn, sample_image, geometry, source_ids=None):
             result = score_fn(sample_image, geometry)
     except Exception as exc:
         raise ValueError(
-            f"score_fn raised while building its EE expression: {exc}. "
-            f"Check the bands/collection it references."
+            f"score_fn raised while building its EE expression: {exc}. Check the bands/collection it references."
         ) from exc
 
     if result is None:
         raise ValueError("score_fn returned None; it must return an ee.Number.")
 
     try:
-        value = ee.Number(result).getInfo()   # the cheap dry-run evaluation
+        value = ee.Number(result).getInfo()  # the cheap dry-run evaluation
     except Exception as exc:
         raise ValueError(
             f"score_fn produced an EE expression that failed to evaluate: {exc}. "
@@ -161,10 +159,7 @@ def _validate_score_fn(score_fn, sample_image, geometry, source_ids=None):
         ) from exc
 
     if value is None:
-        raise ValueError(
-            "score_fn evaluated to None over the sample image (no data?). "
-            "It must return a numeric score."
-        )
+        raise ValueError("score_fn evaluated to None over the sample image (no data?). It must return a numeric score.")
     return value
 
 
@@ -180,10 +175,7 @@ def _score_fn_wants_source_ids(score_fn) -> bool:
         sig = inspect.signature(score_fn)
     except (ValueError, TypeError):
         return False
-    positional = [
-        p for p in sig.parameters.values()
-        if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY)
-    ]
+    positional = [p for p in sig.parameters.values() if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY)]
     if len(positional) >= 3:
         return True
     return any(p.name == "source_ids" for p in sig.parameters.values())
@@ -216,8 +208,7 @@ def _score_row_group(rows, score_fn, wants_sources, target_coarse_pixels):
         if isinstance(row.image, str):
             if "/" not in row.image:
                 raise ValueError(
-                    f"row {row.id!r} has a string image without a granule "
-                    f"({row.image!r}); expected 'asset/granule'."
+                    f"row {row.id!r} has a string image without a granule ({row.image!r}); expected 'asset/granule'."
                 )
             img = ee.Image(row.image)
         else:
@@ -237,11 +228,16 @@ def _score_row_group(rows, score_fn, wants_sources, target_coarse_pixels):
         else:
             score = score_fn(img, geom)
 
-        feats.append(ee.Feature(None, {
-            "row_id": row.id,
-            "coverage": _coverage_value(img, geom, scale),
-            "score": score,
-        }))
+        feats.append(
+            ee.Feature(
+                None,
+                {
+                    "row_id": row.id,
+                    "coverage": _coverage_value(img, geom, scale),
+                    "score": score,
+                },
+            )
+        )
 
     fc = ee.FeatureCollection(feats)
     features = fc.getInfo()["features"]
@@ -254,7 +250,7 @@ def _score_row_group(rows, score_fn, wants_sources, target_coarse_pixels):
 
 def add_metrics(
     table: RequestTable,
-    score_fn: "Callable",
+    score_fn: Callable,
     *,
     target_coarse_pixels: int = 128,
     batch_size: int = 50,
@@ -282,8 +278,9 @@ def add_metrics(
         ValueError: if the table is empty, a row has a malformed string image,
             or score_fn fails the dry-run.
     """
-    import ee
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    import ee
 
     if len(table) == 0:
         raise ValueError("table is empty; nothing to add metrics to.")
@@ -293,14 +290,13 @@ def add_metrics(
     # Dry-run score_fn on one sample image, using ITS OWN geometry, so a broken
     # score_fn fails early (before launching the whole batch).
     sample_row = table.rows[0]
-    sample_img = (
-        ee.Image(sample_row.image) if isinstance(sample_row.image, str)
-        else sample_row.image
-    )
+    sample_img = ee.Image(sample_row.image) if isinstance(sample_row.image, str) else sample_row.image
     sample_geom = rt_to_geometry(sample_row.raster_transform)
     sample_src = (sample_row.metadata or {}).get("source_ids")
     _validate_score_fn(
-        score_fn, sample_img, sample_geom,
+        score_fn,
+        sample_img,
+        sample_geom,
         source_ids=(ee.List(sample_src) if (wants_sources and sample_src) else None),
     )
 
@@ -314,9 +310,7 @@ def add_metrics(
     def _score_with_retry(group):
         """Score a group; on server error, split in half and retry until size 1."""
         try:
-            return _score_row_group(
-                group, score_fn, wants_sources, target_coarse_pixels
-            )
+            return _score_row_group(group, score_fn, wants_sources, target_coarse_pixels)
         except Exception:
             if len(group) <= 1:
                 # Can't split further; mark as unscored (None) rather than crash.
@@ -330,7 +324,7 @@ def add_metrics(
     if len(rows) <= batch_size:
         by_id.update(_score_with_retry(rows))
     else:
-        batches = [rows[i:i + batch_size] for i in range(0, len(rows), batch_size)]
+        batches = [rows[i : i + batch_size] for i in range(0, len(rows), batch_size)]
         with ThreadPoolExecutor(max_workers=nworkers) as ex:
             futs = [ex.submit(_score_with_retry, b) for b in batches]
             for fut in as_completed(futs):

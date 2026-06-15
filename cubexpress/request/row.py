@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from cubexpress.geo.transform import RasterTransform
 
 if TYPE_CHECKING:
-    import ee
+    pass
 
 
 @dataclass(frozen=True)
@@ -30,26 +30,22 @@ class RequestRow:
     raster_transform: RasterTransform
     image: Any
     bands: tuple[str, ...]
-    metadata: dict | None = None 
+    metadata: dict | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:
             raise ValueError(f"id must be a non-empty string, got {self.id!r}")
         if not isinstance(self.raster_transform, RasterTransform):
-            raise TypeError(
-                f"raster_transform must be RasterTransform, "
-                f"got {type(self.raster_transform).__name__}"
-            )
+            raise TypeError(f"raster_transform must be RasterTransform, got {type(self.raster_transform).__name__}")
         # Validate image: str (asset id or serialized json) or ee.Image
         if isinstance(self.image, str):
             if not self.image:
                 raise ValueError("image string must be non-empty")
         else:
             import ee
+
             if not isinstance(self.image, ee.Image):
-                raise TypeError(
-                    f"image must be str or ee.Image, got {type(self.image).__name__}"
-                )
+                raise TypeError(f"image must be str or ee.Image, got {type(self.image).__name__}")
 
         # Convert bands list → tuple silently for ergonomics
         if isinstance(self.bands, list):
@@ -59,10 +55,8 @@ class RequestRow:
         if not all(isinstance(b, str) and b for b in self.bands):
             raise ValueError(f"all band names must be non-empty strings, got {self.bands!r}")
         if self.metadata is not None and not isinstance(self.metadata, dict):
-            raise TypeError(
-                f"metadata must be None or dict, got {type(self.metadata).__name__}"
-            )
-        
+            raise TypeError(f"metadata must be None or dict, got {type(self.metadata).__name__}")
+
     def to_manifest(self, file_format: str = "GEO_TIFF") -> dict:
         """Serialize to an EE manifest dict ready for getPixels/computePixels.
 
@@ -93,6 +87,7 @@ class RequestRow:
         else:
             # ee.Image instance → serialize; already-serialized JSON → use as-is
             import ee
+
             if isinstance(self.image, ee.Image):
                 manifest["expression"] = self.image.serialize()
             else:

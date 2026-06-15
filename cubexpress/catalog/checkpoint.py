@@ -35,10 +35,7 @@ def rts_signature(rts: list[RasterTransform]) -> str:
     """
     h = hashlib.sha256()
     for rt in rts:
-        key = (
-            f"{rt.crs}|{rt.translate_x}|{rt.translate_y}|"
-            f"{rt.scale_x}|{rt.scale_y}|{rt.width}|{rt.height}"
-        )
+        key = f"{rt.crs}|{rt.translate_x}|{rt.translate_y}|{rt.scale_x}|{rt.scale_y}|{rt.width}|{rt.height}"
         h.update(key.encode())
         h.update(b"\n")
     return h.hexdigest()[:16]
@@ -63,10 +60,10 @@ def load_checkpoint(path: str, signature: str) -> dict[int, list[dict]]:
         return {}
 
     resolved: dict[int, list[dict]] = {}
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         first = f.readline()
         if not first.strip():
-            return {}                       # empty file, start fresh
+            return {}  # empty file, start fresh
         header = json.loads(first)
         if header.get("signature") != signature:
             raise ValueError(

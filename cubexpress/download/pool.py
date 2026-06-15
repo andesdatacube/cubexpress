@@ -16,10 +16,10 @@ from __future__ import annotations
 import logging
 import pathlib
 from collections import deque
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TileTask:
     """One downloadable unit belonging to a job."""
+
     job_id: str
     tile_index: int
     manifest: dict
@@ -36,6 +37,7 @@ class TileTask:
 @dataclass
 class Job:
     """A single output (one RequestRow) made of one or more tiles."""
+
     job_id: str
     out_path: pathlib.Path
     tiles: list[TileTask]
@@ -44,6 +46,7 @@ class Job:
 @dataclass
 class _JobState:
     """Mutable progress tracker for one job (guarded by the pool lock)."""
+
     out_path: pathlib.Path
     pending: deque = field(default_factory=deque)
     in_progress: int = 0
@@ -56,8 +59,9 @@ class _JobState:
 @dataclass
 class PoolResult:
     """Outcome of a pool run."""
-    paths: dict = field(default_factory=dict)       # job_id → final path
-    failed: dict = field(default_factory=dict)      # job_id → Exception
+
+    paths: dict = field(default_factory=dict)  # job_id → final path
+    failed: dict = field(default_factory=dict)  # job_id → Exception
 
     @property
     def n_succeeded(self) -> int:
@@ -90,7 +94,7 @@ def run_pool(
     """
     lock = Lock()
     states: dict[str, _JobState] = {}
-    order = []   # job ids, to round-robin fairly across jobs
+    order = []  # job ids, to round-robin fairly across jobs
 
     for job in jobs:
         st = _JobState(out_path=job.out_path, total=len(job.tiles))
@@ -123,15 +127,10 @@ def run_pool(
             else:
                 if not st.failed:
                     st.failed = True
-                    result.failed[task.job_id] = error   # keep the real exception
-            ready = (
-                not st.pending
-                and st.in_progress == 0
-                and not st.failed
-                and not st.merged
-            )
+                    result.failed[task.job_id] = error  # keep the real exception
+            ready = not st.pending and st.in_progress == 0 and not st.failed and not st.merged
             if ready:
-                st.merged = True   # claim the merge so no other worker repeats it
+                st.merged = True  # claim the merge so no other worker repeats it
             return ready
 
     def do_merge(job_id: str) -> None:
@@ -143,13 +142,13 @@ def run_pool(
         except Exception as exc:
             logger.error("merge failed for %s: %s", job_id, exc)
             with lock:
-                result.failed[job_id] = exc   # keep the real exception
+                result.failed[job_id] = exc  # keep the real exception
 
     def worker_loop() -> None:
         while True:
             task = get_next_task()
             if task is None:
-                break   # no more tiles anywhere → this worker retires
+                break  # no more tiles anywhere → this worker retires
             error = None
             try:
                 download_fn(task.manifest, task.tile_path)

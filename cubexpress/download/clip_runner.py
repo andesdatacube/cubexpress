@@ -15,19 +15,18 @@ from __future__ import annotations
 import pathlib
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Union
 
 import shapely
 
+from cubexpress.download.clip_raster import mask_to_polygon
 from cubexpress.download.manifest import download_manifest
 from cubexpress.download.merge import merge_tiles
 from cubexpress.download.nodata_tile import write_nodata_tile
-from cubexpress.download.clip_raster import mask_to_polygon
 from cubexpress.download.tiling import (
-    is_size_error, parse_size_error,
+    is_size_error,
+    parse_size_error,
 )
 from cubexpress.geo.clip import tiles_vs_polygon
-from cubexpress.geo.tiling import split_transform
 from cubexpress.geo.transform import RasterTransform
 from cubexpress.request.row import RequestRow
 
@@ -35,7 +34,7 @@ from cubexpress.request.row import RequestRow
 def express_clip(
     row: RequestRow,
     polygon: shapely.Polygon | shapely.MultiPolygon,
-    outfolder: Union[str, pathlib.Path],
+    outfolder: str | pathlib.Path,
     nworkers: int = 8,
     file_format: str = "GEO_TIFF",
     overwrite: bool = False,
@@ -129,13 +128,13 @@ def _learn_max_pixels(manifest: dict, rt: RasterTransform) -> int | None:
         probe_path = pathlib.Path(d) / "probe.tif"
         try:
             download_manifest(manifest, out_path=probe_path)
-            return None                      # whole bbox fits; no tiling needed
+            return None  # whole bbox fits; no tiling needed
         except Exception as exc:
             if not is_size_error(exc):
                 raise
             actual_bytes, limit_bytes = parse_size_error(str(exc))
             bpp = actual_bytes / (rt.width * rt.height)
-            return int((limit_bytes / bpp) * 0.95)   # 5% headroom
+            return int((limit_bytes / bpp) * 0.95)  # 5% headroom
 
 
 def _download_touching(touching, manifest, tmp_dir, nworkers, tile_paths):
@@ -158,5 +157,6 @@ def _download_touching(touching, manifest, tmp_dir, nworkers, tile_paths):
 def _profile_from_tile(tile_path: pathlib.Path) -> tuple[int, str]:
     """Read band count and dtype from a downloaded tile (for matching nodata)."""
     import rasterio
+
     with rasterio.open(tile_path) as src:
         return src.count, src.dtypes[0]

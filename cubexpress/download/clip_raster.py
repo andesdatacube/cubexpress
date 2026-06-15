@@ -14,15 +14,14 @@ covering slightly MORE than the polygon rather than leaving holes inside it.
 from __future__ import annotations
 
 import pathlib
-from typing import Union
 
 import shapely
 
 
 def mask_to_polygon(
-    tif_path: Union[str, pathlib.Path],
+    tif_path: str | pathlib.Path,
     polygon: shapely.Polygon | shapely.MultiPolygon,
-    out_path: Union[str, pathlib.Path] | None = None,
+    out_path: str | pathlib.Path | None = None,
     nodata: float | int | None = None,
 ) -> pathlib.Path:
     """Set pixels outside the polygon to nodata, aligning the raster to its shape.
@@ -45,19 +44,14 @@ def mask_to_polygon(
     from rasterio.mask import mask as rio_mask
 
     if not isinstance(polygon, (shapely.Polygon, shapely.MultiPolygon)):
-        raise TypeError(
-            f"polygon must be a shapely Polygon or MultiPolygon, got "
-            f"{type(polygon).__name__}."
-        )
+        raise TypeError(f"polygon must be a shapely Polygon or MultiPolygon, got {type(polygon).__name__}.")
 
     tif_path = pathlib.Path(tif_path)
     out_path = pathlib.Path(out_path) if out_path is not None else tif_path
 
     with rasterio.open(tif_path) as src:
         if src.crs is None:
-            raise ValueError(
-                f"{tif_path} has no CRS; cannot mask against a polygon."
-            )
+            raise ValueError(f"{tif_path} has no CRS; cannot mask against a polygon.")
         fill = nodata if nodata is not None else (src.nodata if src.nodata is not None else 0)
 
         # all_touched=True keeps every cell the polygon touches (cover MORE, not

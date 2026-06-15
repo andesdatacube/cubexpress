@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import shapely
 
-from cubexpress.geo.transform import RasterTransform
 from cubexpress.geo.tiling import split_transform
+from cubexpress.geo.transform import RasterTransform
 
 
 def _tile_bbox_polygon(rt: RasterTransform) -> shapely.Polygon:
@@ -26,7 +26,7 @@ def _tile_bbox_polygon(rt: RasterTransform) -> shapely.Polygon:
     x0 = rt.translate_x
     y0 = rt.translate_y
     x1 = x0 + rt.width * rt.scale_x
-    y1 = y0 + rt.height * rt.scale_y     # scale_y < 0 -> y1 below y0
+    y1 = y0 + rt.height * rt.scale_y  # scale_y < 0 -> y1 below y0
     xmin, xmax = min(x0, x1), max(x0, x1)
     ymin, ymax = min(y0, y1), max(y0, y1)
     return shapely.box(xmin, ymin, xmax, ymax)
@@ -56,10 +56,7 @@ def tiles_vs_polygon(
         TypeError: if polygon is not a shapely (Multi)Polygon.
     """
     if not isinstance(polygon, (shapely.Polygon, shapely.MultiPolygon)):
-        raise TypeError(
-            f"polygon must be a shapely Polygon or MultiPolygon, got "
-            f"{type(polygon).__name__}."
-        )
+        raise TypeError(f"polygon must be a shapely Polygon or MultiPolygon, got {type(polygon).__name__}.")
 
     tiles = split_transform(rt, max_pixels=max_pixels)
     # shapely's prepared geometry makes many intersects() checks fast.

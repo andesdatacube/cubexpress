@@ -56,6 +56,7 @@ def download_manifest(
         request = dict(manifest)
         if isinstance(request["expression"], str):
             import json
+
             request["expression"] = ee.deserializer.decode(json.loads(request["expression"]))
         result = ee.data.computePixels(request)
 

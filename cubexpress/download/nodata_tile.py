@@ -10,7 +10,6 @@ sees a complete set of tiles without any download cost for the skipped ones.
 from __future__ import annotations
 
 import pathlib
-from typing import Union
 
 import numpy as np
 
@@ -19,7 +18,7 @@ from cubexpress.geo.transform import RasterTransform
 
 def write_nodata_tile(
     rt: RasterTransform,
-    out_path: Union[str, pathlib.Path],
+    out_path: str | pathlib.Path,
     nbands: int,
     dtype: str = "uint16",
     nodata: float | int = 0,
@@ -49,8 +48,12 @@ def write_nodata_tile(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     transform = Affine(
-        rt.scale_x, 0.0, rt.translate_x,
-        0.0, rt.scale_y, rt.translate_y,
+        rt.scale_x,
+        0.0,
+        rt.translate_x,
+        0.0,
+        rt.scale_y,
+        rt.translate_y,
     )
     profile = {
         "driver": "GTiff",

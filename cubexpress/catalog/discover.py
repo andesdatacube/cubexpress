@@ -102,8 +102,13 @@ def discover_images(
                 "(multi-rt discovery is for temporal assets)."
             )
         table, unresolved = discover_many(
-            asset_id, raster_transform, start, end,
-            with_bands=with_bands, batch_size=batch_size, nworkers=nworkers,
+            asset_id,
+            raster_transform,
+            start,
+            end,
+            with_bands=with_bands,
+            batch_size=batch_size,
+            nworkers=nworkers,
             checkpoint=checkpoint,
         )
         if unresolved:
@@ -145,13 +150,19 @@ def discover_images(
 
     # --- temporal asset: require a date range ---
     if start is None or end is None:
-        raise ValueError(
-            f"Asset {asset_id!r} is temporal; 'start' and 'end' dates are required."
-        )
+        raise ValueError(f"Asset {asset_id!r} is temporal; 'start' and 'end' dates are required.")
 
     table = _discover_temporal(
-        asset_id, raster_transform, start, end, collection, bands, lon, lat,
-        band_dtypes, band_scales,
+        asset_id,
+        raster_transform,
+        start,
+        end,
+        collection,
+        bands,
+        lon,
+        lat,
+        band_dtypes,
+        band_scales,
     )
     return _maybe_mosaic(table, mosaic)
 
@@ -238,13 +249,9 @@ def _discover_temporal(
     import ee
 
     geom = rt_to_geometry(raster_transform)
-    col = (
-        ee.ImageCollection(asset_id)
-        .filterBounds(geom)
-        .filterDate(start, end)
-    )
+    col = ee.ImageCollection(asset_id).filterBounds(geom).filterDate(start, end)
 
-    def _feat(img: "ee.Image") -> "ee.Feature":
+    def _feat(img: ee.Image) -> ee.Feature:
         return ee.Feature(
             None,
             {
@@ -266,9 +273,14 @@ def _discover_temporal(
         for f in features
     ]
     rows = _build_rows_for_rt(
-        raster_transform, asset_id, collection, bands,
-        band_dtypes, band_scales, lon, lat, imgs,
+        raster_transform,
+        asset_id,
+        collection,
+        bands,
+        band_dtypes,
+        band_scales,
+        lon,
+        lat,
+        imgs,
     )
     return RequestTable(rows=tuple(rows))
-
-

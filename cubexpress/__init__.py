@@ -1,13 +1,22 @@
 """cubexpress: Earth Engine data cube downloader."""
 
-from cubexpress.download.manifest import download_manifest
-from cubexpress.download.merge import merge_tiles
-from cubexpress.download.runner import ExpressResult, express, express_one
+from cubexpress.catalog import (
+    AssetInfo,
+    AssetType,
+    add_metrics,
+    clear_asset_type_cache,
+    detect_asset_type,
+    discover_images,
+    inspect_asset,
+)
 from cubexpress.download.grouping import (
     cost_signature,
     cost_signature_from_manifest,
     group_rows_by_signature,
 )
+from cubexpress.download.manifest import download_manifest
+from cubexpress.download.merge import merge_tiles
+from cubexpress.download.runner import ExpressResult, express, express_one
 from cubexpress.download.tiling import (
     bytes_per_pixel_from_error,
     is_size_error,
@@ -22,23 +31,12 @@ from cubexpress.geo.construct import (
     point_to_rt,
     polygon_to_rt,
 )
-from cubexpress.catalog import (
-    AssetInfo,
-    AssetType,
-    clear_asset_type_cache,
-    detect_asset_type,
-    inspect_asset,
-    discover_images,
-    add_metrics,
-)
-
+from cubexpress.geo.geometry import point_to_geometry, rt_to_geometry
 from cubexpress.geo.tiling import split_transform
 from cubexpress.geo.transform import RasterTransform
 from cubexpress.request.builders import build_from_points
 from cubexpress.request.row import RequestRow
 from cubexpress.request.table import RequestTable
-from cubexpress.geo.geometry import point_to_geometry, rt_to_geometry
-
 
 __all__ = [
     # geo

@@ -25,14 +25,14 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 # The two primitives. GEE returns these exact strings in asset["type"].
 AssetType = Literal["IMAGE", "IMAGE_COLLECTION"]
 
 # In-memory caches, populated lazily, living for the session.
 _TYPE_CACHE: dict[str, AssetType] = {}
-_INFO_CACHE: dict[str, "AssetInfo"] = {}
+_INFO_CACHE: dict[str, AssetInfo] = {}
 
 
 @dataclass(frozen=True)
@@ -55,14 +55,15 @@ class AssetInfo:
             None if bands were not fetched. Same keys as `bands`. Bands may have
             different scales (S2 has 10/20/60 m bands).
     """
+
     asset_id: str
     type: AssetType
     is_temporal: bool
-    start: Optional[dt.date] = None
-    end: Optional[dt.date] = None
-    bands: Optional[list[str]] = None
-    band_dtypes: Optional[dict[str, str]] = None
-    band_scales: Optional[dict[str, float]] = None
+    start: dt.date | None = None
+    end: dt.date | None = None
+    bands: list[str] | None = None
+    band_dtypes: dict[str, str] | None = None
+    band_scales: dict[str, float] | None = None
 
 
 def detect_asset_type(asset_id: str, use_cache: bool = True) -> AssetType:
@@ -182,12 +183,13 @@ def clear_asset_type_cache() -> int:
 
 # --- internal helpers ---
 
+
 def _ms_to_date(ms: int) -> dt.date:
     """Convert an epoch-milliseconds timestamp to a UTC date."""
     return dt.datetime.fromtimestamp(ms / 1000, tz=dt.timezone.utc).date()
 
 
-def _parse_update_time(update_time: Optional[str]) -> Optional[dt.date]:
+def _parse_update_time(update_time: str | None) -> dt.date | None:
     """Parse GEE's updateTime ISO string (e.g. '2026-06-12T15:21:39.5Z') to a date."""
     if not update_time:
         return None
@@ -199,9 +201,7 @@ def _parse_update_time(update_time: Optional[str]) -> Optional[dt.date]:
         return dt.date.fromisoformat(update_time[:10])
 
 
-def _fetch_band_info(
-    asset_id: str, asset_type: AssetType
-) -> tuple[list[str], dict[str, str], dict[str, float]]:
+def _fetch_band_info(asset_id: str, asset_type: AssetType) -> tuple[list[str], dict[str, str], dict[str, float]]:
     """Fetch band names, dtypes, and native scales in ONE metadata call.
 
     Calls image.getInfo() on a single representative image. That single response
@@ -245,7 +245,7 @@ def _fetch_band_info(
     return names, dtypes, scales
 
 
-def _pixeltype_to_dtype(pixel_type: Optional[dict]) -> str:
+def _pixeltype_to_dtype(pixel_type: dict | None) -> str:
     """Map an EE PixelType {precision, min, max} to a numpy-like dtype string.
 
     EE reports precision as 'int', 'float', or 'double' plus a value range.
@@ -283,7 +283,7 @@ def _pixeltype_to_dtype(pixel_type: Optional[dict]) -> str:
     return "unknown"
 
 
-def _crs_transform_to_scale(crs_transform: Optional[list]) -> float:
+def _crs_transform_to_scale(crs_transform: list | None) -> float:
     """Read the native pixel scale (meters) from a band's crs_transform.
 
     crs_transform is [scaleX, shearX, translateX, shearY, scaleY, translateY].

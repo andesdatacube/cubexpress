@@ -9,11 +9,11 @@ header so downstream tools (and users opening the file) see B4/B3/B2 instead of
 from __future__ import annotations
 
 import pathlib
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 
 def set_band_descriptions(
-    tif_path: Union[str, pathlib.Path],
+    tif_path: str | pathlib.Path,
     names: Sequence[str],
 ) -> pathlib.Path:
     """Write band names into a GeoTIFF's header (metadata only, no pixel I/O).
@@ -33,9 +33,7 @@ def set_band_descriptions(
     tif_path = pathlib.Path(tif_path)
     with rasterio.open(tif_path, "r+") as src:
         if len(names) != src.count:
-            raise ValueError(
-                f"got {len(names)} names for a {src.count}-band file: {list(names)}"
-            )
-        for i, name in enumerate(names, start=1):    # rasterio bands are 1-indexed
+            raise ValueError(f"got {len(names)} names for a {src.count}-band file: {list(names)}")
+        for i, name in enumerate(names, start=1):  # rasterio bands are 1-indexed
             src.set_band_description(i, name)
     return tif_path

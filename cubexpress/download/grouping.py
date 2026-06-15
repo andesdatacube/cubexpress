@@ -13,7 +13,6 @@ from typing import Any
 
 from cubexpress.request.row import RequestRow
 
-
 # A signature is (sorted_bands, width, height).
 CostSignature = tuple[tuple[str, ...], int, int]
 

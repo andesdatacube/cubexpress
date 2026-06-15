@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import pathlib
-from typing import Optional, Union
 
 
 def merge_tiles(
-    tile_paths: list[Union[str, pathlib.Path]],
-    out_path: Union[str, pathlib.Path],
-    nodata: Optional[Union[int, float]] = None,
+    tile_paths: list[str | pathlib.Path],
+    out_path: str | pathlib.Path,
+    nodata: int | float | None = None,
     gdal_threads: int = 8,
 ) -> pathlib.Path:
     """Merge GeoTIFF tiles into a single mosaic, writing in a streaming fashion.
@@ -48,6 +47,7 @@ def merge_tiles(
     # Single tile: no merge needed, just copy it to the destination.
     if len(paths) == 1:
         import shutil
+
         shutil.copy(paths[0], out_path)
         return out_path
 
@@ -62,10 +62,12 @@ def merge_tiles(
                 first = srcs[0]
                 merge_nodata = nodata if nodata is not None else (first.nodata or 0)
                 dst_kwds = first.profile.copy()
-                dst_kwds.update({
-                    "driver": "GTiff",
-                    "nodata": merge_nodata,
-                })
+                dst_kwds.update(
+                    {
+                        "driver": "GTiff",
+                        "nodata": merge_nodata,
+                    }
+                )
 
                 # Streaming merge — writes window-by-window, memory stays bounded
                 rio_merge(

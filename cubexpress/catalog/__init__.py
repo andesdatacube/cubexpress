@@ -1,5 +1,7 @@
 """Catalog: metadata discovery for Earth Engine assets."""
 
+from cubexpress.catalog.discover import discover_images
+from cubexpress.catalog.metrics import add_metrics
 from cubexpress.catalog.source import (
     AssetInfo,
     AssetType,
@@ -7,15 +9,13 @@ from cubexpress.catalog.source import (
     detect_asset_type,
     inspect_asset,
 )
-from cubexpress.catalog.discover import discover_images
-from cubexpress.catalog.metrics import add_metrics
 
 __all__ = [
-    "AssetType",
     "AssetInfo",
-    "detect_asset_type",
-    "inspect_asset",
-    "clear_asset_type_cache",
-    "discover_images",
+    "AssetType",
     "add_metrics",
+    "clear_asset_type_cache",
+    "detect_asset_type",
+    "discover_images",
+    "inspect_asset",
 ]

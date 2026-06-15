@@ -17,7 +17,6 @@ server) are a different axis, handled by the shrink-and-retry layer.
 
 from __future__ import annotations
 
-
 # Substrings that mark a GEE rate-limit / quota error (vs a volume/memory one).
 _RATE_LIMIT_MARKERS = (
     "too many requests",

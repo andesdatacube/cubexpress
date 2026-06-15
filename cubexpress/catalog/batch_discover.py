@@ -19,19 +19,18 @@ layer shrink-and-retry any batch that times out.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from cubexpress.catalog.adaptive import AdaptiveWorkers, is_rate_limit_error
+from cubexpress.geo.geometry import rt_to_geometry
 from cubexpress.geo.transform import RasterTransform
 from cubexpress.request.table import RequestTable
-from cubexpress.geo.geometry import rt_to_geometry
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from cubexpress.catalog.adaptive import AdaptiveWorkers, is_rate_limit_error
 
 DEFAULT_BATCH_SIZE = 30
 DEFAULT_WORKERS = 8
 
 
-def _chunk_rts(
-    rts: list[RasterTransform], batch_size: int
-) -> list[list[tuple[int, RasterTransform]]]:
+def _chunk_rts(rts: list[RasterTransform], batch_size: int) -> list[list[tuple[int, RasterTransform]]]:
     """Split rts into batches, tagging each rt with its global index.
 
     The global index is how a batch's results are matched back to the original
@@ -54,7 +53,7 @@ def _chunk_rts(
 
     batches = []
     for start_i in range(0, len(rts), batch_size):
-        chunk = rts[start_i:start_i + batch_size]
+        chunk = rts[start_i : start_i + batch_size]
         batches.append([(start_i + j, rt) for j, rt in enumerate(chunk)])
     return batches
 
@@ -95,11 +94,14 @@ def _discover_batch(
     for gid, rt in batch:
         geom = rt_to_geometry(rt)
         touching = col.filterBounds(geom)
-        feat = ee.Feature(geom, {
-            "gid": gid,
-            "granules": touching.aggregate_array("system:index"),
-            "times": touching.aggregate_array("system:time_start"),
-        })
+        feat = ee.Feature(
+            geom,
+            {
+                "gid": gid,
+                "granules": touching.aggregate_array("system:index"),
+                "times": touching.aggregate_array("system:time_start"),
+            },
+        )
         features.append(feat)
 
     fc = ee.FeatureCollection(features)
@@ -139,16 +141,13 @@ def _run_batches_concurrent(
     failed: list[tuple] = []
 
     with ThreadPoolExecutor(max_workers=nworkers) as ex:
-        futs = {
-            ex.submit(_discover_batch, b, asset_id, start, end): b
-            for b in batches
-        }
+        futs = {ex.submit(_discover_batch, b, asset_id, start, end): b for b in batches}
         for fut in as_completed(futs):
             batch = futs[fut]
             try:
                 results.update(fut.result())
             except Exception as exc:
-                failed.append((batch, exc))   # keep the exception for classification
+                failed.append((batch, exc))  # keep the exception for classification
 
     return results, failed
 
@@ -192,9 +191,7 @@ def _discover_with_retry(
     pending: list[list[tuple[int, RasterTransform]]] = _chunk_rts(rts, batch_size)
 
     while pending:
-        results_round, failed = _run_batches_concurrent(
-            pending, asset_id, start, end, nworkers=adaptive.current
-        )
+        results_round, failed = _run_batches_concurrent(pending, asset_id, start, end, nworkers=adaptive.current)
         results.update(results_round)
 
         # Classify failures: rate-limit (slow down) vs volume (split).
@@ -202,9 +199,9 @@ def _discover_with_retry(
         volume_failed = [b for b, exc in failed if not is_rate_limit_error(exc)]
 
         if rate_limited:
-            adaptive.on_rate_limit()        # too many workers -> halve
+            adaptive.on_rate_limit()  # too many workers -> halve
         if not failed:
-            adaptive.on_success()           # clean round -> maybe grow
+            adaptive.on_success()  # clean round -> maybe grow
 
         next_round: list[list[tuple[int, RasterTransform]]] = []
         # Rate-limited batches: retry AS-IS (fewer workers next round).
@@ -248,17 +245,20 @@ def _discover_with_checkpoint(
         (results, unresolved) over ALL rts (resumed + newly discovered).
     """
     from cubexpress.catalog.checkpoint import (
-        rts_signature, load_checkpoint, init_checkpoint, append_checkpoint,
+        append_checkpoint,
+        init_checkpoint,
+        load_checkpoint,
+        rts_signature,
     )
 
     sig = rts_signature(rts)
-    done = load_checkpoint(checkpoint_path, sig)   # {gid: imgs} already resolved
-    init_checkpoint(checkpoint_path, sig)          # ensure header exists
+    done = load_checkpoint(checkpoint_path, sig)  # {gid: imgs} already resolved
+    init_checkpoint(checkpoint_path, sig)  # ensure header exists
 
     # Only discover the rts not already in the checkpoint.
     remaining = [(gid, rt) for gid, rt in enumerate(rts) if gid not in done]
 
-    results: dict[int, list[dict]] = dict(done)    # start with resumed results
+    results: dict[int, list[dict]] = dict(done)  # start with resumed results
     unresolved: list[int] = []
 
     if remaining:
@@ -267,8 +267,12 @@ def _discover_with_checkpoint(
         local_to_global = {local: gid for local, (gid, _) in enumerate(remaining)}
 
         sub_results, sub_unresolved = _discover_with_retry(
-            remaining_rts, asset_id, start, end,
-            batch_size=batch_size, nworkers=nworkers,
+            remaining_rts,
+            asset_id,
+            start,
+            end,
+            batch_size=batch_size,
+            nworkers=nworkers,
         )
         # Map local indices back to global gids, save each to the checkpoint.
         for local_gid, imgs in sub_results.items():
@@ -341,12 +345,22 @@ def discover_many(
     # Run the batch engine, optionally resuming from / saving to a checkpoint.
     if checkpoint is None:
         results, unresolved = _discover_with_retry(
-            rts, asset_id, start, end, batch_size=batch_size, nworkers=nworkers,
+            rts,
+            asset_id,
+            start,
+            end,
+            batch_size=batch_size,
+            nworkers=nworkers,
         )
     else:
         results, unresolved = _discover_with_checkpoint(
-            rts, asset_id, start, end, checkpoint,
-            batch_size=batch_size, nworkers=nworkers,
+            rts,
+            asset_id,
+            start,
+            end,
+            checkpoint,
+            batch_size=batch_size,
+            nworkers=nworkers,
         )
 
     # Build rows per rt with the shared helper (same ids/suffixes as single rt).
@@ -358,8 +372,15 @@ def discover_many(
         lon, lat = _rt_centroid_lonlat(rt)
         all_rows.extend(
             _build_rows_for_rt(
-                rt, asset_id, collection, bands,
-                band_dtypes, band_scales, lon, lat, imgs,
+                rt,
+                asset_id,
+                collection,
+                bands,
+                band_dtypes,
+                band_scales,
+                lon,
+                lat,
+                imgs,
             )
         )
 

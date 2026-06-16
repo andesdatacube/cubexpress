@@ -14,6 +14,7 @@ from cubexpress.download.grouping import (
     cost_signature_from_manifest,
     group_rows_by_signature,
 )
+from cubexpress.download.clip_runner import express_clip
 from cubexpress.download.manifest import download_manifest
 from cubexpress.download.merge import merge_tiles
 from cubexpress.download.runner import ExpressResult, express, express_one
@@ -77,6 +78,7 @@ __all__ = [
     "inspect_asset",
     "discover_images",
     "add_metrics",
+    "express_clip"
 ]
 
 

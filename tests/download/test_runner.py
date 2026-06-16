@@ -569,3 +569,58 @@ def test_express_heterogeneous_one_group_fails_others_ok(tmp_path, monkeypatch):
     assert result.n_succeeded == 2
     assert result.n_failed == 1
     assert "bad_0" in result.failed
+
+
+def test_pool_download_fn_retiles_on_size_error(tmp_path, monkeypatch):
+    """A tile rejected by EE on size is split reactively and merged in place."""
+    import cubexpress.download.runner as runner
+
+    calls = {"download": 0, "merge": 0}
+
+    # first call raises a size error; subsequent (sub-tile) calls succeed
+    def fake_download_manifest(manifest, out_path):
+        calls["download"] += 1
+        if calls["download"] == 1:
+            raise RuntimeError(
+                "Total request size (58720256 bytes) must be less than or equal to 50331648 bytes."
+            )
+        # sub-tiles: write a dummy file
+        pathlib_path = out_path
+        with open(pathlib_path, "wb") as f:
+            f.write(b"tile")
+
+    def fake_split(manifest, error_message, **kwargs):
+        # pretend EE's error splits the tile into 2 sub-tiles
+        return [manifest, manifest]
+
+    def fake_merge(tile_paths, out_path):
+        calls["merge"] += 1
+        with open(out_path, "wb") as f:
+            f.write(b"merged")
+
+    monkeypatch.setattr(runner, "download_manifest", fake_download_manifest)
+    monkeypatch.setattr(runner, "split_manifest_from_error", fake_split)
+    monkeypatch.setattr(runner, "merge_tiles", fake_merge)
+
+    download_tile = runner._pool_download_fn("GEO_TIFF")
+    out = tmp_path / "tile.tif"
+    download_tile({"grid": {}}, out)
+
+    # the first download failed on size, then 2 sub-tiles downloaded, then merged
+    assert calls["download"] == 3      # 1 failed + 2 sub-tiles
+    assert calls["merge"] == 1
+    assert out.exists()
+
+
+def test_pool_download_fn_reraises_non_size_error(tmp_path, monkeypatch):
+    """A non-size error is propagated (not swallowed by retiling)."""
+    import cubexpress.download.runner as runner
+
+    def fake_download_manifest(manifest, out_path):
+        raise RuntimeError("some other EE error")
+
+    monkeypatch.setattr(runner, "download_manifest", fake_download_manifest)
+
+    download_tile = runner._pool_download_fn("GEO_TIFF")
+    with pytest.raises(RuntimeError, match="some other EE error"):
+        download_tile({"grid": {}}, tmp_path / "tile.tif")

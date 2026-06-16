@@ -232,10 +232,26 @@ def _build_job(
 
 
 def _pool_download_fn(file_format: str):
-    """Return a download function bound to the file format, for the pool."""
+    """Return a download function bound to the file format, for the pool.
+
+    If EE rejects a tile on size — because a heavier scene shares a group with
+    the lighter one that was probed, so its tile was predicted to fit but does
+    not — the tile is re-split reactively from the error and its sub-tiles are
+    downloaded and merged in place. This guarantees no scene fails purely
+    because the group's probe under-estimated its cost.
+    """
 
     def download_tile(manifest: dict, tile_path: pathlib.Path) -> None:
-        download_manifest(manifest, out_path=tile_path)
+        try:
+            download_manifest(manifest, out_path=tile_path)
+        except Exception as exc:
+            if not is_size_error(exc):
+                raise
+            # The tile is heavier than the group's probe predicted. Split it
+            # reactively from EE's reported size and merge the sub-tiles here,
+            # so the pool still sees a single finished tile_path.
+            sub_manifests = split_manifest_from_error(manifest, str(exc))
+            _download_and_merge(sub_manifests, tile_path, nworkers=4)
 
     return download_tile
 

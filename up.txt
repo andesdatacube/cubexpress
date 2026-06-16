@@ -1,0 +1,15 @@
+poetry version patch 
+poetry version
+Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+poetry build
+Get-ChildItem dist
+poetry publish
+
+Remove-Item -Recurse -Force site -ErrorAction SilentlyContinue
+git add .
+git commit -m "cubexpress: up"
+git push
+
+
+$env:GEE_PROJECT="ee-contrerasnetk"
+pytest -v -m "not nothing"

@@ -22,7 +22,9 @@ single trip over the loaded pixels:
 The coarse scale used for the reduceRegion is ADAPTIVE: it is a fraction of the
 ROI's own size, not a fixed 100 m. A small ROI gets a fine scale, a huge ROI a
 coarse one, so the aggregation always reads roughly the same number of pixels
-regardless of patch size.
+regardless of patch size. A score_fn that accepts a `scale` argument is handed
+this same adaptive scale, so the score never reads native-resolution pixels
+over a large ROI.
 """
 
 from __future__ import annotations
@@ -112,7 +114,56 @@ def _coverage_value(image, geometry, scale):
     return ee.Number(reduced.get(band_name)).multiply(100)
 
 
-def _validate_score_fn(score_fn, sample_image, geometry, source_ids=None):
+def _score_fn_wants_source_ids(score_fn) -> bool:
+    """True if score_fn accepts a third 'source_ids' argument.
+
+    Lets add_metrics stay backward-compatible: 2-arg score_fns (image, geometry)
+    keep working untouched; 3-arg ones also receive the mosaic's source granules.
+    """
+    import inspect
+
+    try:
+        sig = inspect.signature(score_fn)
+    except (ValueError, TypeError):
+        return False
+    positional = [p for p in sig.parameters.values() if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY)]
+    if len(positional) >= 3:
+        return True
+    return any(p.name == "source_ids" for p in sig.parameters.values())
+
+
+def _score_fn_wants_scale(score_fn) -> bool:
+    """True if score_fn accepts a 'scale' argument.
+
+    Lets add_metrics hand the score_fn the same adaptive coarse scale it uses
+    for coverage, so the score never reads native-resolution pixels over a
+    large ROI.
+    """
+    import inspect
+
+    try:
+        sig = inspect.signature(score_fn)
+    except (ValueError, TypeError):
+        return False
+    return "scale" in sig.parameters
+
+
+def _call_score(score_fn, img, geom, *, wants_sources, wants_scale, src, scale):
+    """Invoke score_fn passing only the optional args it actually accepts."""
+    import ee
+
+    kwargs = {}
+    if wants_sources:
+        kwargs["source_ids"] = ee.List(src) if src else None
+    if wants_scale:
+        kwargs["scale"] = scale
+    return score_fn(img, geom, **kwargs)
+
+
+def _validate_score_fn(
+    score_fn, sample_image, geometry, *,
+    wants_sources=False, wants_scale=False, src=None, scale=None,
+):
     """Dry-run the user's score_fn on ONE image before the full batch.
 
     score_fn is lazy: calling it only builds an EE graph; real errors (a band
@@ -122,11 +173,13 @@ def _validate_score_fn(score_fn, sample_image, geometry, source_ids=None):
     batch of fifty.
 
     Args:
-        score_fn: User function (image, geometry[, source_ids]) -> ee.Number.
+        score_fn: User function (image, geometry[, source_ids][, scale]) -> ee.Number.
         sample_image: One ee.Image to test against (the first discovered scene).
         geometry: The ROI as an ee.Geometry.
-        source_ids: If not None, the score_fn is called in its 3-arg form
-            (image, geometry, source_ids) — used to validate the mosaic path.
+        wants_sources: whether score_fn takes the source_ids arg.
+        wants_scale: whether score_fn takes the scale arg.
+        src: the sample row's source granules (or None).
+        scale: the sample row's adaptive coarse scale.
 
     Returns:
         The evaluated sample score (a Python float/number), proving it runs.
@@ -138,10 +191,15 @@ def _validate_score_fn(score_fn, sample_image, geometry, source_ids=None):
     import ee
 
     try:
-        if source_ids is not None:
-            result = score_fn(sample_image, geometry, source_ids)
-        else:
-            result = score_fn(sample_image, geometry)
+        result = _call_score(
+            score_fn,
+            sample_image,
+            geometry,
+            wants_sources=wants_sources,
+            wants_scale=wants_scale,
+            src=src,
+            scale=scale,
+        )
     except Exception as exc:
         raise ValueError(
             f"score_fn raised while building its EE expression: {exc}. Check the bands/collection it references."
@@ -163,45 +221,18 @@ def _validate_score_fn(score_fn, sample_image, geometry, source_ids=None):
     return value
 
 
-def _score_fn_wants_source_ids(score_fn) -> bool:
-    """True if score_fn accepts a third 'source_ids' argument.
-
-    Lets add_metrics stay backward-compatible: 2-arg score_fns (image, geometry)
-    keep working untouched; 3-arg ones also receive the mosaic's source granules.
-    """
-    import inspect
-
-    try:
-        sig = inspect.signature(score_fn)
-    except (ValueError, TypeError):
-        return False
-    positional = [p for p in sig.parameters.values() if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY)]
-    if len(positional) >= 3:
-        return True
-    return any(p.name == "source_ids" for p in sig.parameters.values())
-
-
 def _score_row_group(rows, score_fn, wants_sources, target_coarse_pixels):
     """Score ONE group of rows in a single server-side getInfo.
 
     Each row is evaluated over ITS OWN geometry and scale (from its own
-    raster_transform) — critical for multi-rt tables where rows belong to
-    different points/CRSs. Using a single shared geometry would score every row
-    against the first row's region, silently yielding 0 for all the others.
+    raster_transform), critical for multi-rt tables where rows belong to
+    different points/CRSs.
 
-    Args:
-        rows: an iterable of RequestRow to score together.
-        score_fn: the user's scoring callable (2- or 3-arg).
-        wants_sources: whether score_fn takes the 3rd source_ids arg.
-        target_coarse_pixels: passed to _coarse_scale per row.
-
-    Returns:
-        dict {row_id: (coverage, score)} for the rows in this group.
-
-    Raises:
-        Propagates EE errors (e.g. memory limit) so the caller can split-retry.
+    Returns dict {row_id: (coverage, score)} for the rows in this group.
     """
     import ee
+
+    wants_scale = _score_fn_wants_scale(score_fn)
 
     feats = []
     for row in rows:
@@ -214,7 +245,6 @@ def _score_row_group(rows, score_fn, wants_sources, target_coarse_pixels):
         else:
             img = row.image
 
-        # Each row uses ITS OWN geometry and scale (multi-rt correctness).
         geom = rt_to_geometry(row.raster_transform)
         scale = _coarse_scale(row.raster_transform, target_coarse_pixels)
 
@@ -223,10 +253,11 @@ def _score_row_group(rows, score_fn, wants_sources, target_coarse_pixels):
         if src:
             img = img.set("cubexpress_source_ids", src)
 
-        if wants_sources:
-            score = score_fn(img, geom, ee.List(src) if src else None)
-        else:
-            score = score_fn(img, geom)
+        score = _call_score(
+            score_fn, img, geom,
+            wants_sources=wants_sources, wants_scale=wants_scale,
+            src=src, scale=scale,
+        )
 
         feats.append(
             ee.Feature(
@@ -265,7 +296,9 @@ def add_metrics(
 
     Args:
         table: A RequestTable from discover_images OR .mosaic().
-        score_fn: Callable (image, geometry[, source_ids]) -> ee.Number.
+        score_fn: Callable (image, geometry[, source_ids][, scale]) -> ee.Number.
+            If it declares a `scale` parameter, it receives the same adaptive
+            coarse scale used for coverage.
         target_coarse_pixels: Approx pixels per side in the metrics reduceRegion.
         batch_size: rows per server-side call (kept modest; heavy score_fns may
             need a smaller value to avoid the memory limit).
@@ -286,18 +319,23 @@ def add_metrics(
         raise ValueError("table is empty; nothing to add metrics to.")
 
     wants_sources = _score_fn_wants_source_ids(score_fn)
+    wants_scale = _score_fn_wants_scale(score_fn)
 
-    # Dry-run score_fn on one sample image, using ITS OWN geometry, so a broken
-    # score_fn fails early (before launching the whole batch).
+    # Dry-run score_fn on one sample image, using ITS OWN geometry and scale, so
+    # a broken score_fn fails early (before launching the whole batch).
     sample_row = table.rows[0]
     sample_img = ee.Image(sample_row.image) if isinstance(sample_row.image, str) else sample_row.image
     sample_geom = rt_to_geometry(sample_row.raster_transform)
     sample_src = (sample_row.metadata or {}).get("source_ids")
+    sample_scale = _coarse_scale(sample_row.raster_transform, target_coarse_pixels)
     _validate_score_fn(
         score_fn,
         sample_img,
         sample_geom,
-        source_ids=(ee.List(sample_src) if (wants_sources and sample_src) else None),
+        wants_sources=wants_sources,
+        wants_scale=wants_scale,
+        src=sample_src,
+        scale=sample_scale,
     )
 
     rows = list(table)

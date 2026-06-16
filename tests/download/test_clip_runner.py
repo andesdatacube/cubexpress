@@ -58,9 +58,10 @@ def test_rejects_non_geotiff():
         cr.express_clip(_fake_table(), SQUARE, "out", file_format="PNG")
 
 
-def test_rejects_non_polygon():
+def test_rejects_unparseable_polygon():
+    """A string that is neither WKT nor GeoJSON is rejected."""
     import cubexpress.download.clip_runner as cr
-    with pytest.raises(TypeError, match="Multi.?Polygon"):
+    with pytest.raises((ValueError, TypeError)):
         cr.express_clip(_fake_table(), "not a polygon", "out")
 
 
@@ -174,3 +175,40 @@ def test_existing_files_skipped_when_not_overwrite(tmp_path, monkeypatch):
     # both scenes accounted for, scene_0 from disk (skipped)
     assert result.n_succeeded == 2
     assert result.paths["scene_0"] == tmp_path / "scene_0.tif"
+
+
+def test_polygon_accepts_geojson_lonlat(monkeypatch):
+    """A lon/lat GeoJSON dict is parsed and reprojected to the table's CRS."""
+    import cubexpress.download.clip_runner as cr
+
+    gj = {
+        "type": "Polygon",
+        "coordinates": [[
+            [-77.10, -9.57], [-77.04, -9.57],
+            [-77.04, -9.51], [-77.10, -9.51], [-77.10, -9.57],
+        ]],
+    }
+    poly = cr._polygon_in_table_crs(gj, "EPSG:32718")
+    # reprojected to UTM -> coords are large metres, not lon/lat
+    minx, miny, maxx, maxy = poly.bounds
+    assert minx > 1000  # metres, not degrees
+
+
+def test_polygon_already_utm_left_asis():
+    """A polygon already in the table's CRS (UTM metres) is not reprojected."""
+    import cubexpress.download.clip_runner as cr
+    import shapely
+
+    utm_poly = shapely.box(200000, 8900000, 210000, 8910000)
+    out = cr._polygon_in_table_crs(utm_poly, "EPSG:32718")
+    assert out.bounds == utm_poly.bounds   # unchanged
+
+
+def test_polygon_lonlat_table_no_reproject():
+    """If the table is already lon/lat, the polygon is used as-is."""
+    import cubexpress.download.clip_runner as cr
+    import shapely
+
+    poly = shapely.box(-77.1, -9.6, -77.0, -9.5)
+    out = cr._polygon_in_table_crs(poly, "EPSG:4326")
+    assert out.bounds == poly.bounds

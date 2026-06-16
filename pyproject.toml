@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cubexpress"
-version = "0.2.4"
+version = "0.2.5"
 description = "Efficient processing of cubic Earth-observation (EO) data."
 authors = ["Julio Contreras <contrerasnetk@gmail.com>"]
 repository = "https://github.com/andesdatacube/cubexpress"

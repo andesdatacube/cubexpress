@@ -31,8 +31,52 @@ from cubexpress.download.tiling import (
 )
 from cubexpress.geo.clip import tiles_vs_polygon
 from cubexpress.geo.transform import RasterTransform
-from cubexpress.request.row import RequestRow
 from cubexpress.request.table import RequestTable
+
+
+def _polygon_in_table_crs(polygon, table_crs: str):
+    """Normalize any polygon input to a shapely geometry in the table's CRS.
+
+    Accepts a shapely (Multi)Polygon, a WKT string, or a GeoJSON dict, in lon/lat
+    (EPSG:4326) or already in the table's CRS. Uses cubexpress.to_polygon to parse,
+    then reprojects from EPSG:4326 to the table's CRS when they differ.
+
+    Heuristic: to_polygon yields lon/lat geometry. If the table's CRS is not
+    EPSG:4326, we reproject from 4326 to it. If coordinates already look like the
+    table's CRS (e.g. UTM metres), reprojecting from 4326 would be wrong — so we
+    detect that by range: lon/lat live within [-180,180]x[-90,90].
+    """
+    import shapely
+    import shapely.ops
+    from cubexpress.geo.construct import to_polygon
+
+    if isinstance(polygon, str) or isinstance(polygon, dict):
+        poly = to_polygon(polygon)
+    elif isinstance(polygon, (shapely.Polygon, shapely.MultiPolygon)):
+        poly = polygon
+    else:
+        poly = to_polygon(polygon)
+
+    if not isinstance(poly, (shapely.Polygon, shapely.MultiPolygon)):
+        raise TypeError(f"could not parse polygon, got {type(poly).__name__}.")
+
+    # If the table is already in lon/lat, nothing to reproject.
+    if table_crs in ("EPSG:4326", "epsg:4326"):
+        return poly
+
+    # Decide if the polygon is in lon/lat (needs reprojection) or already in the
+    # table CRS (leave as-is). lon/lat coords fall within the geographic bounds.
+    minx, miny, maxx, maxy = poly.bounds
+    looks_lonlat = (-180 <= minx <= 180 and -180 <= maxx <= 180
+                    and -90 <= miny <= 90 and -90 <= maxy <= 90)
+
+    if looks_lonlat:
+        from pyproj import Transformer
+        tf = Transformer.from_crs("EPSG:4326", table_crs, always_xy=True)
+        return shapely.ops.transform(lambda x, y: tf.transform(x, y), poly)
+
+    # Already in the table's CRS (e.g. UTM metres) — use as-is.
+    return poly
 
 
 def express_clip(
@@ -72,10 +116,13 @@ def express_clip(
     """
     if file_format != "GEO_TIFF":
         raise ValueError("express_clip supports GEO_TIFF only (clipping needs rasters).")
-    if not isinstance(polygon, (shapely.Polygon, shapely.MultiPolygon)):
-        raise TypeError(f"polygon must be shapely (Multi)Polygon, got {type(polygon).__name__}.")
     if len(table.rows) == 0:
         raise ValueError("express_clip got an empty table.")
+
+    rt = table.rows[0].raster_transform
+
+    # Normalize the polygon to a shapely geometry in the table's CRS.
+    polygon = _polygon_in_table_crs(polygon, rt.crs)
 
     outfolder = pathlib.Path(outfolder)
     outfolder.mkdir(parents=True, exist_ok=True)
@@ -83,8 +130,6 @@ def express_clip(
     paths: dict[str, pathlib.Path] = {}
     failed: dict[str, Exception] = {}
 
-    # All rows share the same bbox transform, so probe + tiling pattern ONCE.
-    rt = table.rows[0].raster_transform
     probe_manifest = table.rows[0].to_manifest(file_format=file_format)
     max_pixels = _learn_max_pixels(probe_manifest, rt)
 

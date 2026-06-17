@@ -296,7 +296,7 @@ def add_metrics(
 
     Args:
         table: A RequestTable from discover_images OR .mosaic().
-        score_fn: Callable (image, geometry[, source_ids][, scale]) -> ee.Number.
+        score_fn: Callable ``(image, geometry[, source_ids][, scale])`` returning ee.Number.
             If it declares a `scale` parameter, it receives the same adaptive
             coarse scale used for coverage.
         target_coarse_pixels: Approx pixels per side in the metrics reduceRegion.

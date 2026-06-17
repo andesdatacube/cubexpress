@@ -1569,7 +1569,9 @@ batch that hits the server memory limit is split and retried.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Callable (image, geometry[, source_ids]) -&gt; ee.Number.</p>
+                <p>Callable <code>(image, geometry[, source_ids][, scale])</code> returning ee.Number.
+If it declares a <code>scale</code> parameter, it receives the same adaptive
+coarse scale used for coverage.</p>
               </div>
             </td>
             <td>

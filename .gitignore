@@ -1,5 +1,4 @@
 dist/
-data/
 /download/
 !cubexpress/download/
 docs/source
@@ -14,7 +13,6 @@ demo.py
 scripts/
 notes.txt
 example.py
-data/
 s2_download/
 s2_table/
 df_raw.csv
